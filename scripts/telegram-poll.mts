@@ -24,7 +24,10 @@ await api("deleteWebhook");
 await api("setMyCommands", {
   commands: [
     { command: "today", description: "What needs water today" },
-    { command: "stop", description: "Stop reminders in this chat" },
+    { command: "list", description: "Your shopping list" },
+    { command: "plants", description: "How your plants are doing" },
+    { command: "help", description: "What I can do" },
+    { command: "stop", description: "Stop messages in this chat" },
   ],
 });
 const me = await api<{ username: string }>("getMe");

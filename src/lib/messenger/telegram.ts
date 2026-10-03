@@ -56,3 +56,28 @@ export async function getBotUsername(): Promise<string> {
   botUsername ??= (await telegramApi<{ username: string }>("getMe")).username;
   return botUsername;
 }
+
+/** Shows "typing…" in the chat for a few seconds while we work. */
+export function sendTelegramTyping(chatId: string | number) {
+  return telegramApi("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+}
+
+export interface TelegramPhotoSize {
+  file_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+}
+
+/** Downloads the best photo size for analysis (≤ ~1600 px, like app uploads). */
+export async function downloadTelegramPhoto(sizes: TelegramPhotoSize[]): Promise<string> {
+  const sorted = [...sizes].sort((a, b) => a.width * a.height - b.width * b.height);
+  const pick = [...sorted].reverse().find((s) => Math.max(s.width, s.height) <= 1600) ?? sorted[0];
+  const file = await telegramApi<{ file_path: string; file_size?: number }>("getFile", { file_id: pick.file_id });
+  if ((file.file_size ?? 0) > 10 * 1024 * 1024) throw new Error("photo too large");
+  const res = await fetch(`https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`, {
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`photo download ${res.status}`);
+  return Buffer.from(await res.arrayBuffer()).toString("base64");
+}

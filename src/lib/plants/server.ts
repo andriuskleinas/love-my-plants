@@ -53,6 +53,20 @@ export async function consumeAiQuota(userId: string): Promise<void> {
   await admin.from("ai_usage").upsert({ user_id: userId, day, calls: calls + 1 });
 }
 
+export const DAILY_CHAT_LIMIT = 60;
+
+/** Counts one Plant Buddy chat message; throws 429 when the day's allowance is used. */
+export async function consumeChatQuota(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const day = new Date().toISOString().slice(0, 10);
+  const { data } = await admin.from("ai_usage").select("calls, chat_calls").eq("user_id", userId).eq("day", day).maybeSingle();
+  const used = data?.chat_calls ?? 0;
+  if (used >= DAILY_CHAT_LIMIT) {
+    throw new HttpError(429, "That's a lot of plant talk for one day! Let's continue tomorrow. 🌿");
+  }
+  await admin.from("ai_usage").upsert({ user_id: userId, day, calls: data?.calls ?? 0, chat_calls: used + 1 });
+}
+
 export function speciesSlug(scientificName: string): string {
   return scientificName
     .toLowerCase()

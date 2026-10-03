@@ -2,6 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { handleTelegramUpdate, type TelegramUpdate } from "@/lib/messenger/bot.server";
 
+// Plant Buddy replies (especially photos) can take a while.
+export const maxDuration = 60;
+
 // Telegram webhook. Telegram sends our secret in this header on every update.
 export async function POST(request: NextRequest) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET ?? "";

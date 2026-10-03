@@ -205,6 +205,9 @@ function Today({
           <Link href="/vacation" aria-label="Going away" className="rounded-full p-2">
             ✈️
           </Link>
+          <Link href="/shopping" aria-label="Shopping list" className="rounded-full p-2">
+            🛒
+          </Link>
           <Link href="/circle" aria-label="Care Circle" className="rounded-full p-2">
             👥
           </Link>

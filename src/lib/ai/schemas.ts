@@ -98,11 +98,26 @@ export type Assessment = z.infer<typeof assessmentSchema>;
 
 export const shopVerdictSchema = z.object({
   product: z.string(),
+  /** Which of the owner's plants this was judged for (nickname), if any. */
+  forPlant: z.string().nullable(),
   verdict: z.enum(["good", "tweak", "skip"]),
   reason: z.string().max(400),
   alternative: z.string().max(300).nullable(),
 });
 export type ShopVerdict = z.infer<typeof shopVerdictSchema>;
+
+/** One Plant Buddy chat turn. */
+export const buddyReplySchema = z.object({
+  /** Plain text for a phone chat, no markdown. */
+  reply: z.string().min(1).max(3000),
+  /** Set when the message was a photo of a product (soil, pot, fertilizer, spray…). */
+  productCheck: shopVerdictSchema.nullable(),
+  /** Only when the owner asked to add something, or agreed to buy what was recommended. */
+  addToShoppingList: z
+    .array(z.object({ item: z.string().min(1).max(80), reason: z.string().max(120), plant: z.string().nullable() }))
+    .max(5),
+});
+export type BuddyReply = z.infer<typeof buddyReplySchema>;
 
 /** Plant ER triggers (plan F7). */
 export function needsEmergency(current: number, previous?: number | null): boolean {
