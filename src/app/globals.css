@@ -1,26 +1,52 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --background: #f7f5ef;
+  --surface: #ffffff;
+  --foreground: #1d2a1f;
+  --muted: #5f6b60;
+  --border: #e3e0d6;
+  --leaf: #2f6b3f;
+  --leaf-soft: #e3efe4;
+  --terracotta: #c0603a;
+  --good: #2f8a4a;
+  --warn: #c98a12;
+  --bad: #c2413a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #111511;
+    --surface: #1a201a;
+    --foreground: #e8ede6;
+    --muted: #9aa69b;
+    --border: #2b342b;
+    --leaf: #7cc48d;
+    --leaf-soft: #1f3324;
+    --terracotta: #e08a62;
+    --good: #6cc983;
+    --warn: #e5b04a;
+    --bad: #ef7d74;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-leaf: var(--leaf);
+  --color-leaf-soft: var(--leaf-soft);
+  --color-terracotta: var(--terracotta);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --font-sans: var(--font-geist-sans);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }

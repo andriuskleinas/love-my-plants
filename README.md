@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Love My Plants 🪴
 
-## Getting Started
+Snap a photo of a house plant and get a health check, three simple care steps for today, watering reminders that learn, a repot plan, a growth time-lapse, rescue plans, vacation prep and a plant-sitter link.
 
-First, run the development server:
+Installable web app (PWA): Next.js + Supabase + Claude vision. A Telegram "Plant Buddy" chat is planned.
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env.local   # fill in your own keys; never commit .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tests
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test          # care logic: watering, repot plan, access rules, AI output schema
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Database access rules (RLS) can be checked against a throwaway local Postgres:
 
-## Learn More
+```bash
+psql -d <scratch_db> -f supabase/tests/stubs.sql \
+  -f supabase/migrations/20261003000000_init.sql \
+  -f supabase/tests/rls_test.sql
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/lib/care/` contains pure care logic (watering intervals, repot plan, Care Circle access).
+- `src/lib/ai/` contains the structured AI output schemas.
+- `supabase/migrations/` holds the database schema and row-level security.
+- `public/sw.js` is the service worker for push reminders.
