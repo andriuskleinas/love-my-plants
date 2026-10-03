@@ -12,6 +12,8 @@ export interface WateringInput {
   baseIntervalDays: number;
   date: Date;
   hemisphere?: Hemisphere;
+  /** Home latitude (rounded). When known, seasons follow real daylight hours. */
+  latitude?: number | null;
   potDiameterCm: number;
   potMaterial: PotMaterial;
   hasDrainage: boolean;
@@ -27,7 +29,28 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-export function seasonFactor(date: Date, hemisphere: Hemisphere = "north"): number {
+export function hemisphereOf(latitude: number): Hemisphere {
+  return latitude < 0 ? "south" : "north";
+}
+
+/** Hours between sunrise and sunset at a latitude on a date (standard declination formula). */
+export function daylightHours(latitude: number, date: Date): number {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date.getTime() - start) / DAY_MS);
+  const rad = Math.PI / 180;
+  const declination = -23.44 * Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10));
+  const x = -Math.tan(latitude * rad) * Math.tan(declination * rad);
+  if (x <= -1) return 24; // midnight sun
+  if (x >= 1) return 0; // polar night
+  return (2 * Math.acos(x)) / rad / 15;
+}
+
+export function seasonFactor(date: Date, hemisphere: Hemisphere = "north", latitude?: number | null): number {
+  // With a location: less daylight means slower growth and slower drying, and vice versa.
+  // 12 h of daylight is neutral; ~7 h (a northern European winter) waters ~45% less often.
+  if (latitude != null) {
+    return clamp(Math.pow(12 / Math.max(daylightHours(latitude, date), 1), 0.7), 0.8, 1.6);
+  }
   // Shift month by 6 for the southern hemisphere so "summer" is always Jun–Aug equivalent.
   const month = (date.getMonth() + (hemisphere === "south" ? 6 : 0)) % 12;
   if (month >= 5 && month <= 7) return 0.85; // summer: dries faster
@@ -62,7 +85,7 @@ export function lightFactor(direction: WindowDirection, hemisphere: Hemisphere =
 export function wateringIntervalDays(input: WateringInput): number {
   const raw =
     input.baseIntervalDays *
-    seasonFactor(input.date, input.hemisphere) *
+    seasonFactor(input.date, input.hemisphere, input.latitude) *
     potFactor(input.potDiameterCm, input.potMaterial, input.hasDrainage) *
     lightFactor(input.windowDirection, input.hemisphere) *
     (input.learnedFactor ?? 1);

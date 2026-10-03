@@ -54,7 +54,7 @@ export async function answerWaterTask(
     plant.species_id
       ? supabase.from("species_profiles").select("base_water_interval_days").eq("id", plant.species_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase.from("profiles").select("hemisphere").eq("id", userId).maybeSingle(),
+    supabase.from("profiles").select("hemisphere, latitude").eq("id", userId).maybeSingle(),
     memberIdFor(supabase, userId, plant.home_id),
   ]);
 
@@ -62,6 +62,7 @@ export async function answerWaterTask(
     baseIntervalDays: Number(species?.base_water_interval_days ?? DEFAULT_BASE_INTERVAL_DAYS),
     date: now,
     hemisphere: (profile?.hemisphere ?? "north") as Hemisphere,
+    latitude: profile?.latitude == null ? null : Number(profile.latitude),
     potDiameterCm: Number(plant.pot_diameter_cm),
     potMaterial: plant.pot_material,
     hasDrainage: plant.has_drainage,

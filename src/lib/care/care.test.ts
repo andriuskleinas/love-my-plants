@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applySoilFeedback,
+  daylightHours,
+  hemisphereOf,
   combineWindowSides,
   windowDirectionName,
   initialWaterDueAt,
@@ -36,6 +38,24 @@ describe("watering interval", () => {
     const summer = wateringIntervalDays({ ...base, date: new Date(2026, 6, 10) });
     expect(winter).toBeGreaterThan(7);
     expect(summer).toBeLessThan(7);
+  });
+
+  it("knows daylight hours by latitude", () => {
+    const vilnius = 54.7;
+    expect(daylightHours(vilnius, new Date("2026-12-21T12:00:00Z"))).toBeCloseTo(7, 0);
+    expect(daylightHours(vilnius, new Date("2026-06-21T12:00:00Z"))).toBeCloseTo(17.3, 0);
+    expect(daylightHours(0, new Date("2026-06-21T12:00:00Z"))).toBeCloseTo(12.1, 0);
+    expect(daylightHours(78, new Date("2026-06-21T12:00:00Z"))).toBe(24);
+  });
+
+  it("follows real daylight when the location is known", () => {
+    const at = (iso: string, latitude: number) =>
+      wateringIntervalDays({ ...base, baseIntervalDays: 10, date: new Date(iso), latitude });
+    expect(at("2026-12-21T12:00:00Z", 54.7)).toBe(15); // dark Vilnius winter: much less often
+    expect(at("2026-06-21T12:00:00Z", 54.7)).toBe(8); // long summer days: more often
+    expect(at("2026-12-21T12:00:00Z", 1.3)).toBe(10); // Singapore: no real seasons
+    expect(at("2026-06-21T12:00:00Z", -33.9)).toBeGreaterThan(10); // Sydney winter in June
+    expect(hemisphereOf(-33.9)).toBe("south");
   });
 
   it("flips seasons and sunny side for the southern hemisphere", () => {

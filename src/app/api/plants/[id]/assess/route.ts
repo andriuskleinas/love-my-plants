@@ -52,7 +52,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     await consumeAiQuota(userId);
 
     const [{ data: profile }, { data: previous }] = await Promise.all([
-      supabase.from("profiles").select("hemisphere").eq("id", userId).maybeSingle(),
+      supabase.from("profiles").select("hemisphere, latitude, location_name").eq("id", userId).maybeSingle(),
       supabase
         .from("assessments")
         .select("created_at, health, scores, estimated_height_cm")
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         .maybeSingle(),
     ]);
     const hemisphere = (profile?.hemisphere ?? "north") as Hemisphere;
+    const latitude = profile?.latitude == null ? null : Number(profile.latitude);
 
     // Download with the user's client, so storage RLS applies.
     const images: AssessPhoto[] = await Promise.all(
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       waterAmountMl: waterAmountMl(Number(plant.pot_diameter_cm)),
       windowDirection: plant.window_direction,
       hemisphere,
+      location: latitude != null && profile?.location_name ? { name: profile.location_name, latitude } : null,
       today: now,
       previous: previous
         ? {
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         baseIntervalDays: assessment.careProfile.baseWaterIntervalDays,
         date: now,
         hemisphere,
+        latitude,
         potDiameterCm: Number(plant.pot_diameter_cm),
         potMaterial: plant.pot_material,
         hasDrainage: plant.has_drainage,

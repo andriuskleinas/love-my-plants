@@ -6,21 +6,30 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
   const title = data.title || "Your plants";
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || "",
-      icon: "/icons/192",
-      badge: "/icons/192",
-      tag: data.tag,
-      data: { url: data.url || "/", taskIds: data.taskIds || [] },
-      actions: data.taskIds && data.taskIds.length
-        ? [
-            { action: "done", title: "Done ✅" },
-            { action: "snooze", title: "Snooze ⏰" },
-          ]
-        : [],
-    }),
-  );
+  const hasTasks = data.taskIds && data.taskIds.length > 0;
+
+  // Tell open app windows a push arrived (Settings uses this to diagnose hidden notifications).
+  const notifyClients = self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((wins) => wins.forEach((w) => w.postMessage({ type: "push-received", tag: data.tag })));
+
+  const show = self.registration.showNotification(title, {
+    body: data.body || "",
+    icon: "/icons/192",
+    badge: "/icons/192",
+    tag: data.tag,
+    // Re-alert when a notification with the same tag replaces an earlier one.
+    renotify: Boolean(data.tag),
+    data: { url: data.url || "/", taskIds: data.taskIds || [] },
+    actions: hasTasks
+      ? [
+          { action: "done", title: "Done ✅" },
+          { action: "snooze", title: "Snooze ⏰" },
+        ]
+      : [],
+  });
+
+  event.waitUntil(Promise.all([notifyClients, show]));
 });
 
 self.addEventListener("notificationclick", (event) => {

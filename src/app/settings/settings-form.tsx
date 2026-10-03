@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LocationCard } from "./location-card";
 import { createClient } from "@/lib/supabase/client";
 
 const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`); // 06:00–22:00
@@ -9,15 +10,15 @@ const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 6).padStart(2, 
 export function SettingsForm(props: {
   digestTime: string;
   hemisphere: "north" | "south";
+  locationName: string | null;
   timezone: string;
   email: string | null;
 }) {
   const router = useRouter();
   const [digestTime, setDigestTime] = useState(props.digestTime);
-  const [hemisphere, setHemisphere] = useState(props.hemisphere);
   const [saved, setSaved] = useState<string | null>(null);
 
-  async function save(update: { digestTime?: string; hemisphere?: string }) {
+  async function save(update: { digestTime?: string }) {
     setSaved(null);
     const res = await fetch("/api/profile", {
       method: "PATCH",
@@ -59,27 +60,7 @@ export function SettingsForm(props: {
         </select>
       </div>
 
-      <fieldset className="rounded-2xl border border-border bg-surface p-4 text-sm">
-        <legend className="sr-only">Hemisphere</legend>
-        <p className="font-semibold">Where do you live?</p>
-        <p className="mt-1 text-muted">Seasons change how often plants need water.</p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {(["north", "south"] as const).map((h) => (
-            <button
-              key={h}
-              type="button"
-              aria-pressed={hemisphere === h}
-              onClick={() => {
-                setHemisphere(h);
-                save({ hemisphere: h });
-              }}
-              className={`rounded-xl border px-3 py-2.5 ${hemisphere === h ? "border-leaf bg-leaf-soft" : "border-border"}`}
-            >
-              {h === "north" ? "Northern hemisphere" : "Southern hemisphere"}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <LocationCard initialName={props.locationName} />
 
       {saved && (
         <p role="status" className="text-sm text-muted">

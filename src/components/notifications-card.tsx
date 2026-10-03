@@ -94,9 +94,29 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
   async function sendTest() {
     setBusy(true);
     setMessage(null);
+    // Listen for the service worker confirming the push reached this browser.
+    let received = false;
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "push-received" && e.data.tag === "test") received = true;
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+
     const res = await fetch("/api/push/test", { method: "POST" });
     const json = await res.json().catch(() => ({}));
-    setMessage(res.ok ? "Sent! It should appear in a few seconds." : (json.error ?? "Couldn't send."));
+    if (!res.ok) {
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+      setMessage(json.error ?? "Couldn't send.");
+      setBusy(false);
+      return;
+    }
+    setMessage("Sent! Waiting for it to arrive…");
+    for (let i = 0; i < 20 && !received; i++) await new Promise((r) => setTimeout(r, 500));
+    navigator.serviceWorker.removeEventListener("message", onMessage);
+    setMessage(
+      received
+        ? "Your browser received it. Didn't see a pop-up? Your computer is hiding it: allow notifications for your browser in the system settings (on a Mac: System Settings → Notifications), and check Focus / Do Not Disturb is off."
+        : "It didn't arrive within 10 seconds. Try Turn off, then Turn on reminders again.",
+    );
     setBusy(false);
   }
 

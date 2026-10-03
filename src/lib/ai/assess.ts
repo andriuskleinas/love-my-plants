@@ -1,7 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
-import { windowDirectionName, type WindowDirection } from "../care/watering";
+import { daylightHours, windowDirectionName, type WindowDirection } from "../care/watering";
 import { assessmentSchema, type Assessment } from "./schemas";
 
 // Opus 5.5 by default; set ASSESS_MODEL=claude-sonnet-5-5 to trade some quality for cost.
@@ -26,6 +26,7 @@ export interface AssessContext {
   waterAmountMl: number;
   windowDirection: WindowDirection;
   hemisphere: "north" | "south";
+  location?: { name: string; latitude: number } | null;
   today: Date;
   previous?: { date: string; health: number; scores: Record<string, number>; heightCm: number | null } | null;
   emergency?: boolean;
@@ -79,6 +80,11 @@ export class AssessmentError extends Error {
 function contextText(ctx: AssessContext): string {
   const lines = [
     `Date: ${ctx.today.toISOString().slice(0, 10)} (${ctx.hemisphere}ern hemisphere)`,
+    ...(ctx.location
+      ? [
+          `Location: ${ctx.location.name} (latitude ${ctx.location.latitude.toFixed(1)}); about ${daylightHours(ctx.location.latitude, ctx.today).toFixed(1)} h of daylight today`,
+        ]
+      : []),
     `Pot: ${ctx.potDiameterCm} cm diameter, ${ctx.potMaterial}, ${ctx.hasDrainage ? "has" : "NO"} drainage hole`,
     `Watering amount for this pot: about ${ctx.waterAmountMl} ml`,
     `Window: ${ctx.windowDirection === "none" ? "not near a window" : `${windowDirectionName(ctx.windowDirection)}-facing window`}`,
