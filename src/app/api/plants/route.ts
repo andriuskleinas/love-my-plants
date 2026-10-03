@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { WINDOW_DIRECTIONS } from "@/lib/care/watering";
 import { createClient } from "@/lib/supabase/server";
 import { errorResponse, getManagedHomeId, HttpError, requireUserId } from "@/lib/plants/server";
 
@@ -7,7 +8,7 @@ const createSchema = z.object({
   potDiameterCm: z.number().min(4).max(100),
   potMaterial: z.enum(["plastic", "ceramic", "terracotta", "other"]).default("plastic"),
   hasDrainage: z.boolean(),
-  windowDirection: z.enum(["N", "E", "S", "W", "none"]),
+  windowDirection: z.enum(WINDOW_DIRECTIONS),
 });
 
 // Creates a draft plant so its photos have a storage folder; the nickname is set after the check.

@@ -1,6 +1,7 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { windowDirectionName, type WindowDirection } from "../care/watering";
 import { assessmentSchema, type Assessment } from "./schemas";
 
 // Opus 5.5 by default; set ASSESS_MODEL=claude-sonnet-5-5 to trade some quality for cost.
@@ -21,7 +22,7 @@ export interface AssessContext {
   potDiameterCm: number;
   potMaterial: string;
   hasDrainage: boolean;
-  windowDirection: string;
+  windowDirection: WindowDirection;
   hemisphere: "north" | "south";
   today: Date;
   previous?: { date: string; health: number; scores: Record<string, number>; heightCm: number | null } | null;
@@ -76,7 +77,7 @@ function contextText(ctx: AssessContext): string {
   const lines = [
     `Date: ${ctx.today.toISOString().slice(0, 10)} (${ctx.hemisphere}ern hemisphere)`,
     `Pot: ${ctx.potDiameterCm} cm diameter, ${ctx.potMaterial}, ${ctx.hasDrainage ? "has" : "NO"} drainage hole`,
-    `Window: ${ctx.windowDirection === "none" ? "not near a window" : `${ctx.windowDirection}-facing window`}`,
+    `Window: ${ctx.windowDirection === "none" ? "not near a window" : `${windowDirectionName(ctx.windowDirection)}-facing window`}`,
   ];
   if (ctx.speciesHint) lines.push(`Owner says the species is: ${ctx.speciesHint}`);
   if (ctx.previous) {

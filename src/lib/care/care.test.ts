@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   applySoilFeedback,
+  combineWindowSides,
+  windowDirectionName,
   initialWaterDueAt,
   lightFactor,
   nextWaterAt,
@@ -42,6 +44,11 @@ describe("watering interval", () => {
     expect(lightFactor("S", "south")).toBe(1.15);
   });
 
+  it("treats in-between windows as halfway between their two sides", () => {
+    expect(lightFactor("SW")).toBeCloseTo((0.85 + 0.9) / 2);
+    expect(lightFactor("NE", "south")).toBeCloseTo((0.85 + 1.0) / 2);
+  });
+
   it("dries faster in terracotta, slower without drainage", () => {
     expect(wateringIntervalDays({ ...base, baseIntervalDays: 10, potMaterial: "terracotta" })).toBeLessThan(10);
     expect(wateringIntervalDays({ ...base, baseIntervalDays: 10, hasDrainage: false })).toBeGreaterThan(10);
@@ -60,6 +67,25 @@ describe("watering interval", () => {
     expect(waterAmountMl(12)).toBeGreaterThanOrEqual(150);
     expect(waterAmountMl(12)).toBeLessThanOrEqual(400);
     expect(waterAmountMl(6)).toBe(50);
+  });
+});
+
+describe("window sides", () => {
+  it("combines neighbouring sides into one direction in either tap order", () => {
+    expect(combineWindowSides([])).toBe("none");
+    expect(combineWindowSides(["S"])).toBe("S");
+    expect(combineWindowSides(["S", "W"])).toBe("SW");
+    expect(combineWindowSides(["W", "S"])).toBe("SW");
+    expect(combineWindowSides(["E", "N"])).toBe("NE");
+  });
+
+  it("keeps the last tap for opposite sides", () => {
+    expect(combineWindowSides(["N", "S"])).toBe("S");
+  });
+
+  it("names directions in plain words", () => {
+    expect(windowDirectionName("SW")).toBe("south-west");
+    expect(windowDirectionName("E")).toBe("east");
   });
 });
 

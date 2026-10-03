@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ReportCard } from "@/components/report-card";
 import type { Assessment } from "@/lib/ai/schemas";
+import {
+  combineWindowSides,
+  windowDirectionName,
+  type CardinalDirection,
+  type WindowDirection,
+} from "@/lib/care/watering";
 import { compressImage } from "@/lib/image/compress";
 import { createClient } from "@/lib/supabase/client";
 
@@ -29,13 +35,12 @@ const MATERIALS = [
   { label: "Ceramic", value: "ceramic" },
   { label: "Terracotta", value: "terracotta" },
 ] as const;
-const WINDOWS = [
+const SIDES: { label: string; value: CardinalDirection }[] = [
   { label: "North", value: "N" },
   { label: "East", value: "E" },
   { label: "South", value: "S" },
   { label: "West", value: "W" },
-  { label: "No window", value: "none" },
-] as const;
+];
 
 const CHECKING_MESSAGES = [
   "Looking at the leaves…",
@@ -75,7 +80,9 @@ export function RegisterFlow() {
   const [potCm, setPotCm] = useState<number | null>(null);
   const [material, setMaterial] = useState<(typeof MATERIALS)[number]["value"]>("plastic");
   const [drainage, setDrainage] = useState<boolean | null>(null);
-  const [windowDir, setWindowDir] = useState<(typeof WINDOWS)[number]["value"] | null>(null);
+  // Up to two neighbouring sides (S + W = south-west), or "none" for no window.
+  const [sides, setSides] = useState<CardinalDirection[] | "none" | null>(null);
+  const windowDir: WindowDirection | null = sides === null ? null : sides === "none" ? "none" : combineWindowSides(sides);
   const [plant, setPlant] = useState<{ id: string; homeId: string } | null>(null);
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [species, setSpecies] = useState<string>("");
@@ -110,6 +117,20 @@ export function RegisterFlow() {
     } catch {
       setError("We couldn't read that photo. Please try another one.");
     }
+  }
+
+  function toggleSide(side: CardinalDirection) {
+    setSides((prev) => {
+      const current = Array.isArray(prev) ? prev : [];
+      if (current.includes(side)) {
+        const next = current.filter((s) => s !== side);
+        return next.length ? next : null;
+      }
+      // Keep the last tap, plus the previous one if it's a neighbouring side.
+      const last = current.at(-1);
+      const combined = last ? combineWindowSides([last, side]) : side;
+      return combined.length === 2 ? [last!, side] : [side];
+    });
   }
 
   async function runCheck() {
@@ -288,13 +309,28 @@ export function RegisterFlow() {
           <fieldset className="mt-6">
             <legend className="font-medium">Which way does the nearest window face?</legend>
             <div className="mt-2 flex flex-wrap gap-2">
-              {WINDOWS.map((w) => (
-                <Chip key={w.value} selected={windowDir === w.value} onClick={() => setWindowDir(w.value)}>
-                  {w.label}
-                </Chip>
-              ))}
+              {SIDES.map((w) => {
+                const selected = Array.isArray(sides) && sides.includes(w.value);
+                return (
+                  <Chip key={w.value} selected={selected} onClick={() => toggleSide(w.value)}>
+                    {w.label}
+                  </Chip>
+                );
+              })}
+              <Chip selected={sides === "none"} onClick={() => setSides("none")}>
+                No window
+              </Chip>
             </div>
-            <p className="mt-2 text-xs text-muted">Not sure? Where does the sun come in around midday? That&apos;s south (in the northern hemisphere).</p>
+            <p className="mt-2 text-xs text-muted">
+              {windowDir && windowDir !== "none" ? (
+                <>
+                  Got it: a <b className="text-foreground">{windowDirectionName(windowDir)}</b>-facing window.
+                  {windowDir.length === 1 && " Facing in between? Tap a second side too."}
+                </>
+              ) : (
+                <>Facing in between? Tap two sides, e.g. South + West. Not sure? The midday sun comes from the south (northern hemisphere).</>
+              )}
+            </p>
           </fieldset>
 
           <button

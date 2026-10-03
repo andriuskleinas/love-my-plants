@@ -2,7 +2,9 @@
 // interval = species_base × season × pot × light × learned, clamped to a sane range.
 
 export type PotMaterial = "plastic" | "ceramic" | "terracotta" | "other";
-export type WindowDirection = "N" | "E" | "S" | "W" | "none";
+export type CardinalDirection = "N" | "E" | "S" | "W";
+export type WindowDirection = CardinalDirection | "NE" | "SE" | "SW" | "NW" | "none";
+export const WINDOW_DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "none"] as const;
 export type Hemisphere = "north" | "south";
 export type SoilFeedback = "dry" | "damp" | "dry_drooping";
 
@@ -42,6 +44,11 @@ export function potFactor(diameterCm: number, material: PotMaterial, hasDrainage
 }
 
 export function lightFactor(direction: WindowDirection, hemisphere: Hemisphere = "north"): number {
+  // In-between windows (e.g. SW) sit halfway between their two sides.
+  if (direction.length === 2) {
+    const [a, b] = direction.split("") as CardinalDirection[];
+    return (lightFactor(a, hemisphere) + lightFactor(b, hemisphere)) / 2;
+  }
   // The equator-facing window gets the most sun.
   const sunny = hemisphere === "north" ? "S" : "N";
   const shady = hemisphere === "north" ? "N" : "S";
@@ -64,6 +71,31 @@ export function wateringIntervalDays(input: WateringInput): number {
 
 export function nextWaterAt(lastWateredAt: Date, intervalDays: number): Date {
   return new Date(lastWateredAt.getTime() + intervalDays * DAY_MS);
+}
+
+const COMPASS: CardinalDirection[] = ["N", "E", "S", "W"];
+
+/**
+ * Combines the sides a user tapped into one window direction:
+ * none → "none", one side → that side, two neighbouring sides → "SW"-style.
+ * Opposite sides (N+S) aren't one window, so the last tap wins.
+ */
+export function combineWindowSides(sides: CardinalDirection[]): WindowDirection {
+  if (sides.length === 0) return "none";
+  if (sides.length === 1) return sides[0];
+  const [a, b] = sides.slice(-2);
+  if ((COMPASS.indexOf(a) + 2) % 4 === COMPASS.indexOf(b)) return b;
+  const ns = [a, b].find((d) => d === "N" || d === "S")!;
+  const ew = [a, b].find((d) => d === "E" || d === "W")!;
+  return `${ns}${ew}` as WindowDirection;
+}
+
+const DIRECTION_NAMES: Record<string, string> = { N: "north", E: "east", S: "south", W: "west" };
+
+/** "SW" → "south-west" */
+export function windowDirectionName(direction: WindowDirection): string {
+  if (direction === "none") return "no window";
+  return direction.split("").map((d) => DIRECTION_NAMES[d]).join("-");
 }
 
 export interface FeedbackResult {
