@@ -70,6 +70,17 @@ export const assessmentSchema = z.object({
     drainsTooFast: z.boolean(),
   }),
   suggestedNickname: z.string().max(40).nullable(),
+  /** Species care parameters; cached in species_profiles and used by the reminder engine. */
+  careProfile: z.object({
+    baseWaterIntervalDays: z.number().min(1).max(60),
+    repotIntervalMonths: z.number().int().min(6).max(60),
+    light: z.string(),
+    humidity: z.string(),
+    temperature: z.string(),
+    fertilizer: z.string(),
+    soilMix: z.string(),
+    toxicToPets: z.boolean().nullable(),
+  }),
   rescuePlan: z
     .object({
       diagnosis: z.array(z.object({ cause: z.string(), confidence })),

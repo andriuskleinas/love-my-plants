@@ -33,6 +33,9 @@ export async function proxy(request: NextRequest) {
   const isPublic = path === "/" || PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
   if (!data?.claims && !isPublic) {
+    if (path.startsWith("/api/")) {
+      return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", path);

@@ -91,6 +91,16 @@ export function applySoilFeedback(
   }
 }
 
+/**
+ * First watering reminder for a newly registered plant, when we don't know when it was
+ * last watered: thirsty-looking plants are due today, others part-way through an interval.
+ */
+export function initialWaterDueAt(hydrationScore: number, intervalDays: number, now: Date): Date {
+  if (hydrationScore < 45) return now;
+  const fraction = hydrationScore < 70 ? 0.5 : 1;
+  return new Date(now.getTime() + Math.max(1, Math.round(intervalDays * fraction)) * DAY_MS);
+}
+
 /** Rough watering amount: ~1/4 of the pot volume, rounded to 50 ml. */
 export function waterAmountMl(potDiameterCm: number): number {
   const r = potDiameterCm / 2;

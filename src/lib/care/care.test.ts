@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySoilFeedback,
+  initialWaterDueAt,
   lightFactor,
   nextWaterAt,
   seasonFactor,
@@ -59,6 +60,20 @@ describe("watering interval", () => {
     expect(waterAmountMl(12)).toBeGreaterThanOrEqual(150);
     expect(waterAmountMl(12)).toBeLessThanOrEqual(400);
     expect(waterAmountMl(6)).toBe(50);
+  });
+});
+
+describe("first watering reminder", () => {
+  const now = new Date("2026-10-03T08:00:00Z");
+  const days = (d: Date) => Math.round((d.getTime() - now.getTime()) / 86400000);
+
+  it("is due today for a thirsty plant", () => {
+    expect(days(initialWaterDueAt(30, 8, now))).toBe(0);
+  });
+
+  it("is half an interval away for a so-so plant and a full one for a well-watered plant", () => {
+    expect(days(initialWaterDueAt(60, 8, now))).toBe(4);
+    expect(days(initialWaterDueAt(90, 8, now))).toBe(8);
   });
 });
 
@@ -156,6 +171,16 @@ describe("AI output", () => {
     estimatedHeightCm: 45,
     repotSignals: { rootsVisible: false, drainsTooFast: false },
     suggestedNickname: "Monty",
+    careProfile: {
+      baseWaterIntervalDays: 7,
+      repotIntervalMonths: 24,
+      light: "Bright indirect",
+      humidity: "50%+",
+      temperature: "18–27 °C",
+      fertilizer: "Monthly in spring and summer",
+      soilMix: "Aroid mix",
+      toxicToPets: true,
+    },
     rescuePlan: null,
   };
 
