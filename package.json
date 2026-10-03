@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "assess": "tsx --conditions=react-server scripts/assess-photo.mts",
-    "reminders": "tsx scripts/run-reminders.mts"
+    "reminders": "tsx scripts/run-reminders.mts",
+    "telegram": "tsx scripts/telegram-poll.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

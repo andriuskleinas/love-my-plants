@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { InstallCoach } from "@/components/install-coach";
-import { NotificationsCard } from "@/components/notifications-card";
+import { TelegramCard } from "@/components/telegram-card";
 import { HealthBadge } from "@/components/report-card";
 import { StepList, type StepItem } from "@/components/step-list";
 import { WaterCard, type WaterCardProps } from "@/components/water-card";
@@ -165,7 +165,7 @@ function Today({ plants, water, steps }: { plants: PlantRow[]; water: WaterCardP
       </header>
       <div className="mt-4 space-y-3">
         <InstallCoach />
-        {plants.length > 0 && <NotificationsCard compact />}
+        {plants.length > 0 && <TelegramCard compact />}
       </div>
 
       {plants.length === 0 ? (

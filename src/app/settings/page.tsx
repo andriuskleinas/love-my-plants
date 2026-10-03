@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { NotificationsCard } from "@/components/notifications-card";
+import { TelegramCard } from "@/components/telegram-card";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./settings-form";
 
@@ -26,8 +27,15 @@ export default async function SettingsPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-semibold">Settings</h1>
 
-      <div className="mt-6">
-        <NotificationsCard />
+      <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-muted">Reminders</h2>
+      <div className="mt-2 space-y-3">
+        <TelegramCard />
+        <details className="rounded-2xl border border-border bg-surface text-sm">
+          <summary className="cursor-pointer select-none p-4 font-medium">Prefer browser notifications?</summary>
+          <div className="px-4 pb-4">
+            <NotificationsCard />
+          </div>
+        </details>
       </div>
 
       <SettingsForm
