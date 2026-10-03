@@ -13,6 +13,7 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
   const [state, setState] = useState<State>("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [link, setLink] = useState<{ url: string; code: string; bot: string } | null>(null);
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -33,8 +34,10 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
     setBusy(false);
     if (!res.ok) return setMessage(json.error ?? "Couldn't start. Please try again.");
 
+    setLink(json);
     window.open(json.url, "_blank", "noopener");
     setState("waiting");
+    if (polling.current) clearInterval(polling.current);
     // Wait for the user to press Start in Telegram (link is valid for 15 minutes).
     let tries = 0;
     polling.current = setInterval(async () => {
@@ -75,15 +78,26 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
       <p className="font-semibold">✈️ Reminders in Telegram</p>
       {state === "on" && <p className="mt-1 text-muted">Connected. You&apos;ll get a message on days a plant needs water, with buttons to answer.</p>}
       {state === "off" && <p className="mt-1 text-muted">Get a message on days a plant needs water, and answer with one tap.</p>}
-      {state === "waiting" && (
-        <p className="mt-1 text-muted">
-          Telegram should open now. Press <b>Start</b> in the chat with the bot and this will update by itself.
-        </p>
+      {state === "waiting" && link && (
+        <div className="mt-2 space-y-2 text-muted">
+          <p>
+            Telegram should open. Press <b>Start</b> in the chat with{" "}
+            <a href={link.url} target="_blank" rel="noopener" className="font-medium text-leaf">
+              @{link.bot}
+            </a>
+            .
+          </p>
+          <p>Not connected after Start? Send the bot this code:</p>
+          <p className="select-all rounded-xl bg-background py-3 text-center font-mono text-2xl font-semibold tracking-widest text-foreground">
+            {link.code}
+          </p>
+          <p className="text-xs">The code works once and expires in 15 minutes. This card updates by itself.</p>
+        </div>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {(state === "off" || state === "waiting") && (
           <button disabled={busy} onClick={connect} className={`${button} bg-leaf text-background`}>
-            {state === "waiting" ? "Open Telegram again" : "Connect Telegram"}
+            {state === "waiting" ? "New code" : "Connect Telegram"}
           </button>
         )}
         {state === "on" && (

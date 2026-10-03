@@ -4,7 +4,7 @@ import { endOfLocalDay } from "@/lib/care/schedule";
 import { answerWaterTask } from "@/lib/care/tasks.server";
 import { dueLabel } from "@/lib/plants/format";
 import { createAdminClient } from "@/lib/supabase/server";
-import { consumeLinkToken, unlinkChat, userForChat } from "./links.server";
+import { consumeLinkToken, normalizeLinkCode, unlinkChat, userForChat } from "./links.server";
 import { decodeWaterAnswer, waterAnswerSummary, waterReminderMessage } from "./reminders";
 import { answerTelegramCallback, editTelegramMessage, sendTelegramMessage } from "./telegram";
 
@@ -18,8 +18,6 @@ export interface TelegramUpdate {
     message?: { message_id: number; chat: { id: number; type: string } };
   };
 }
-
-const appUrl = () => process.env.APP_URL ?? "http://localhost:3000";
 
 const HELP =
   "🌿 <b>Love My Plants</b>\n\n" +
@@ -49,9 +47,14 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
       await sendTelegramMessage(chatId, "Disconnected. You won't get reminders here anymore. Reconnect any time from the app's Settings.");
       return;
     default:
+      // A connect code typed by hand (when the Start link didn't carry it).
+      if (normalizeLinkCode(msg.text)) return handleStart(chatId, msg.text);
       await sendTelegramMessage(chatId, HELP);
   }
 }
+
+const SEND_CODE =
+  "👋 Hi! To connect, open Love My Plants → ⚙️ Settings → <b>Connect Telegram</b>, then send me the 8-character code shown there (like <code>K7MP-3XQ2</code>).";
 
 async function handleStart(chatId: string, token?: string) {
   if (token) {
@@ -60,7 +63,7 @@ async function handleStart(chatId: string, token?: string) {
       chatId,
       userId
         ? "✅ <b>Connected!</b> Your watering reminders will arrive here at your reminder time.\n\nSend /today to see what needs water now."
-        : `That link has expired. Open <a href="${appUrl()}/settings">Settings</a> and tap <b>Connect Telegram</b> again.`,
+        : "That code didn't work. It may have expired (codes last 15 minutes). In the app, tap <b>Connect Telegram</b> again for a new one.",
     );
     return;
   }
@@ -69,7 +72,7 @@ async function handleStart(chatId: string, token?: string) {
     chatId,
     linked
       ? `You're connected ✅\n\n${HELP}`
-      : `👋 Hi! To get reminders here, open <a href="${appUrl()}/settings">Love My Plants → Settings</a> and tap <b>Connect Telegram</b>.`,
+      : SEND_CODE,
   );
 }
 

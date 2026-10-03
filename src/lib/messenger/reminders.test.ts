@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeWaterAnswer, encodeWaterAnswer, waterAnswerSummary, waterReminderMessage } from "./reminders";
+import { formatLinkCode, normalizeLinkCode } from "./link-code";
 import { escapeHtml } from "./types";
 
 const taskId = "3f8a1c2e-1234-4abc-9def-0123456789ab";
@@ -34,5 +35,20 @@ describe("water reminder buttons", () => {
 
   it("escapes HTML", () => {
     expect(escapeHtml("<b>&</b>")).toBe("&lt;b&gt;&amp;&lt;/b&gt;");
+  });
+});
+
+describe("connect codes", () => {
+  it("accepts codes however they're typed", () => {
+    expect(normalizeLinkCode("K7MP-3XQ2")).toBe("K7MP3XQ2");
+    expect(normalizeLinkCode(" k7mp 3xq2 ")).toBe("K7MP3XQ2");
+    expect(formatLinkCode("K7MP3XQ2")).toBe("K7MP-3XQ2");
+  });
+
+  it("rejects ordinary messages and look-alike characters", () => {
+    expect(normalizeLinkCode("hello there")).toBeNull();
+    expect(normalizeLinkCode("why are my leaves yellow")).toBeNull();
+    expect(normalizeLinkCode("K7MP-3XQO")).toBeNull(); // letter O isn't used
+    expect(normalizeLinkCode("/today")).toBeNull();
   });
 });

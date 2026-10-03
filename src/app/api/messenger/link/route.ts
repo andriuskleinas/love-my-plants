@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chatForUser, createLinkToken, unlinkChat } from "@/lib/messenger/links.server";
+import { chatForUser, createLinkToken, formatLinkCode, unlinkChat } from "@/lib/messenger/links.server";
 import { getBotUsername, sendTelegramMessage, telegramConfigured } from "@/lib/messenger/telegram";
 import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -22,7 +22,8 @@ export async function POST() {
     const userId = await requireUserId(await createClient());
     if (!telegramConfigured()) throw new HttpError(503, "Telegram isn't set up yet.");
     const token = await createLinkToken(userId);
-    return NextResponse.json({ url: `https://t.me/${await getBotUsername()}?start=${token}` });
+    const bot = await getBotUsername();
+    return NextResponse.json({ url: `https://t.me/${bot}?start=${token}`, code: formatLinkCode(token), bot });
   } catch (error) {
     return errorResponse(error);
   }
