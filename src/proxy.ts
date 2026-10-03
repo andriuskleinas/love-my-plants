@@ -4,8 +4,43 @@ import { NextResponse, type NextRequest } from "next/server";
 // Paths reachable without an account: landing, login, auth callbacks, sitter links, webhooks.
 const PUBLIC_PATHS = ["/login", "/auth", "/sit", "/api/sit", "/api/telegram", "/api/cron", "/icons", "/manifest.webmanifest", "/sw.js"];
 
+/**
+ * Per-request Content Security Policy with a script nonce (Next.js applies it to its own
+ * scripts). Inline style attributes stay allowed: charts and the camera overlay use them.
+ */
+function contentSecurityPolicy(nonce: string) {
+  const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const dev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' blob: data: ${supabase}`,
+    `connect-src 'self' ${supabase}${dev ? " ws:" : ""}`,
+    "font-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    ...(dev ? [] : ["upgrade-insecure-requests"]),
+  ].join("; ");
+}
+
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = contentSecurityPolicy(nonce);
+  const next = () => {
+    const headers = new Headers(request.headers);
+    headers.set("x-nonce", nonce);
+    headers.set("Content-Security-Policy", csp);
+    const res = NextResponse.next({ request: { headers } });
+    res.headers.set("Content-Security-Policy", csp);
+    return res;
+  };
+
+  let response = next();
   // Not connected to Supabase yet (fresh checkout): let pages render their signed-out state.
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return response;
 
@@ -19,7 +54,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = next();
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
           Object.entries(headers).forEach(([key, value]) => response.headers.set(key, value));
         },

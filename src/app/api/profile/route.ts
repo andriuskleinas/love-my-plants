@@ -3,7 +3,7 @@ import { z } from "zod";
 import { hemisphereOf } from "@/lib/care/watering";
 import { roundCoord } from "@/lib/geo.server";
 import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 
 const profileSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
@@ -44,7 +44,8 @@ export async function PATCH(request: NextRequest) {
     const { error } = await supabase.from("profiles").update(update).eq("id", userId);
     // Keep the name shown in the Care Circle in sync.
     if (!error && parsed.data.displayName) {
-      await supabase.from("home_members").update({ display_name: parsed.data.displayName }).eq("user_id", userId);
+      // Server-side: users can't edit their own owner membership row under RLS.
+      await createAdminClient().from("home_members").update({ display_name: parsed.data.displayName }).eq("user_id", userId);
     }
     if (error) throw error;
     return NextResponse.json({ ok: true });

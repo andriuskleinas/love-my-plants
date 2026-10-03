@@ -69,6 +69,25 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000d';
 select pg_temp.expect('stranger sees only own (empty) home plants', (select count(*) from public.plants), 0);
 select pg_temp.expect('stranger sees only own membership', (select count(*) from public.home_members), 1);
 
+-- Household can't take over or detach the owner, or force accounts into the home.
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+update public.home_members set role = 'household' where user_id = '00000000-0000-0000-0000-00000000000a';
+do $$ begin
+  update public.home_members set user_id = null where user_id = '00000000-0000-0000-0000-00000000000a';
+  raise exception 'FAIL household changed a membership''s account';
+exception when insufficient_privilege then raise notice 'ok  household cannot reassign memberships';
+end $$;
+do $$ begin
+  insert into public.home_members (home_id, user_id, display_name, role)
+    select id, '00000000-0000-0000-0000-00000000000d', 'Forced', 'household' from public.homes where created_by = '00000000-0000-0000-0000-00000000000a';
+  raise exception 'FAIL household forced an account into the home';
+exception when insufficient_privilege then raise notice 'ok  household cannot force accounts into the home';
+end $$;
+reset role;
+select pg_temp.expect('owner is still owner',
+  (select count(*) from public.home_members where user_id = '00000000-0000-0000-0000-00000000000a' and role = 'owner'), 1);
+set role authenticated;
+
 -- Expired sitter
 reset role;
 update public.home_members set starts_at = now() - interval '10 days', ends_at = now() - interval '1 day'

@@ -190,7 +190,7 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
     await editTelegramMessage(
       chatId,
       cb.message.message_id,
-      `✓ ${nickname} is already taken care of. Next watering: ${dueLabel(new Date(task.due_at), now)}.`,
+      `✓ ${escapeHtml(nickname)} is already taken care of. Next watering: ${dueLabel(new Date(task.due_at), now)}.`,
     );
     return;
   }
