@@ -22,6 +22,8 @@ export interface AssessContext {
   potDiameterCm: number;
   potMaterial: string;
   hasDrainage: boolean;
+  /** The app's watering amount for this pot; the AI must use it so steps match reminders. */
+  waterAmountMl: number;
   windowDirection: WindowDirection;
   hemisphere: "north" | "south";
   today: Date;
@@ -56,7 +58,8 @@ If a photo needed for a score is missing (e.g. no soil close-up), estimate from 
 - Be honest but kind. Never invent problems; only report issues you can see evidence of. Use confidence < 0.6 when unsure; the app shows those as "possible".
 - If the photos are too blurry, dark, cropped, or don't show a plant, set photoQuality.ok=false with one specific retake hint (e.g. "Step back so the whole plant and pot are in frame"). Still fill every field with your best guess.
 - species: up to 3 guesses, most likely first, with scientific and common names.
-- actions: at most 3, most important first, each one short concrete step a beginner can do today with real-world units ("Water about 250 ml (one glass) slowly until it drains, then empty the saucer"). If nothing is needed today, give one reassuring action like "No water today — check the soil again in 3 days".
+- actions: at most 3, most important first, each one short concrete step a beginner can do today with real-world units ("Water about 250 ml (one glass) slowly until it drains, then empty the saucer"). If nothing is needed today, give one reassuring action like "No water today — we'll remind you when it's time".
+- Watering: whenever a step says to water, use exactly the amount given in the request. Never promise a number of days until the next watering; the app's reminders handle timing and learn from the owner's feedback.
 - estimatedHeightCm: estimate plant height above the soil, using the pot diameter given as scale. null if impossible.
 - repotSignals: rootsVisible only if roots are visible at the drainage holes or soil surface; drainsTooFast only if there is visible evidence.
 - careProfile: typical care for this species indoors. baseWaterIntervalDays is the typical days between waterings in spring for a 15 cm plastic pot with drainage in an east window (the app adjusts for season, pot and light itself).
@@ -77,6 +80,7 @@ function contextText(ctx: AssessContext): string {
   const lines = [
     `Date: ${ctx.today.toISOString().slice(0, 10)} (${ctx.hemisphere}ern hemisphere)`,
     `Pot: ${ctx.potDiameterCm} cm diameter, ${ctx.potMaterial}, ${ctx.hasDrainage ? "has" : "NO"} drainage hole`,
+    `Watering amount for this pot: about ${ctx.waterAmountMl} ml`,
     `Window: ${ctx.windowDirection === "none" ? "not near a window" : `${windowDirectionName(ctx.windowDirection)}-facing window`}`,
   ];
   if (ctx.speciesHint) lines.push(`Owner says the species is: ${ctx.speciesHint}`);

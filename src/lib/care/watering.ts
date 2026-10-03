@@ -133,9 +133,9 @@ export function initialWaterDueAt(hydrationScore: number, intervalDays: number, 
   return new Date(now.getTime() + Math.max(1, Math.round(intervalDays * fraction)) * DAY_MS);
 }
 
-/** Rough watering amount: ~1/4 of the pot volume, rounded to 50 ml. */
+/** Rough watering amount: ~12% of the pot volume (≈150 ml for a 12 cm pot), rounded to 50 ml. */
 export function waterAmountMl(potDiameterCm: number): number {
   const r = potDiameterCm / 2;
   const volumeMl = Math.PI * r * r * potDiameterCm * 0.9; // pot height ≈ diameter
-  return Math.max(50, Math.round((volumeMl * 0.25) / 50) * 50);
+  return Math.max(50, Math.round((volumeMl * 0.12) / 50) * 50);
 }

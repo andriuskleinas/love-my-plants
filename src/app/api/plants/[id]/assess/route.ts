@@ -79,6 +79,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       potDiameterCm: Number(plant.pot_diameter_cm),
       potMaterial: plant.pot_material,
       hasDrainage: plant.has_drainage,
+      waterAmountMl: waterAmountMl(Number(plant.pot_diameter_cm)),
       windowDirection: plant.window_direction,
       hemisphere,
       today: now,

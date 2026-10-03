@@ -64,8 +64,8 @@ describe("watering interval", () => {
   });
 
   it("suggests a reasonable amount of water", () => {
-    expect(waterAmountMl(12)).toBeGreaterThanOrEqual(150);
-    expect(waterAmountMl(12)).toBeLessThanOrEqual(400);
+    expect(waterAmountMl(12)).toBe(150);
+    expect(waterAmountMl(17)).toBe(400);
     expect(waterAmountMl(6)).toBe(50);
   });
 });

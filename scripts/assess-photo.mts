@@ -25,6 +25,7 @@ const result = await assessPlant(photos, {
   potDiameterCm: 17,
   potMaterial: "plastic",
   hasDrainage: true,
+  waterAmountMl: 400,
   windowDirection: "E",
   hemisphere: "north",
   today: new Date(),
