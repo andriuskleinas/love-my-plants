@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { assessPlant, AssessmentError, ASSESS_MODEL, type AssessPhoto } from "@/lib/ai/assess";
 import { needsEmergency } from "@/lib/ai/schemas";
+import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { initialWaterDueAt, wateringIntervalDays, waterAmountMl, type Hemisphere } from "@/lib/care/watering";
 import {
   consumeAiQuota,
@@ -151,11 +152,12 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       .single();
     if (saveError) throw saveError;
 
-    const cover = photoRows.find((r) => r.kind === "whole") ?? photoRows[0];
+    const cover = photoRows.find((r) => r.kind === "whole" || r.kind === "checkin") ?? photoRows[0];
     const plantUpdate: Record<string, unknown> = {
       status: needsEmergency(assessment.scores.health.value, previous?.health) ? "er" : "ok",
     };
-    if (!plant.cover_photo_id || cover.kind === "whole") plantUpdate.cover_photo_id = cover.id;
+    // Newest whole-plant view becomes the cover (registration or weekly check-in).
+    if (!plant.cover_photo_id || cover.kind === "whole" || cover.kind === "checkin") plantUpdate.cover_photo_id = cover.id;
     if (!plant.species_name && speciesName) {
       plantUpdate.species_name = speciesName;
       plantUpdate.species_id = speciesId;
@@ -193,7 +195,13 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       if (taskError) throw taskError;
     }
 
-    return NextResponse.json({ assessmentId: saved.id, assessment });
+    await refreshPlantPlan(plantId, hemisphere, now);
+
+    return NextResponse.json({
+      assessmentId: saved.id,
+      assessment,
+      previous: previous ? { health: previous.health, scores: previous.scores, date: previous.created_at } : null,
+    });
   } catch (error) {
     if (error instanceof AssessmentError) {
       console.error("assessment failed:", error.message);

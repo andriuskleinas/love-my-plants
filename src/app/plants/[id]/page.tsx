@@ -1,14 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { HealthTrend } from "@/components/health-trend";
 import { ReportCard } from "@/components/report-card";
 import { StepList } from "@/components/step-list";
+import { Timelapse, type Frame } from "@/components/timelapse";
 import { WaterCard } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
+import { daysSince, needsCheckin } from "@/lib/care/plan";
+import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { endOfLocalDay } from "@/lib/care/schedule";
+import type { Hemisphere } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 import { DeletePlantButton } from "./delete-button";
+import { PlanSection } from "./plan-section";
 
 export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const { id } = await params;
@@ -54,12 +60,42 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const assessment = latest ? assessmentSchema.safeParse(latest.raw) : null;
 
   const { data: claims } = await supabase.auth.getClaims();
-  const [{ data: profile }, { data: ticks }] = await Promise.all([
-    supabase.from("profiles").select("timezone").eq("id", claims?.claims?.sub ?? "").maybeSingle(),
+  const [{ data: profile }, { data: ticks }, { data: history }, { data: photos }, milestonesResult] = await Promise.all([
+    supabase.from("profiles").select("timezone, hemisphere").eq("id", claims?.claims?.sub ?? "").maybeSingle(),
     latest
       ? supabase.from("care_events").select("action_index").eq("assessment_id", latest.id)
       : Promise.resolve({ data: [] as { action_index: number }[] }),
+    supabase
+      .from("assessments")
+      .select("created_at, health, estimated_height_cm, photo_ids")
+      .eq("plant_id", id)
+      .order("created_at"),
+    supabase
+      .from("photos")
+      .select("id, storage_path, kind, taken_at")
+      .eq("plant_id", id)
+      .order("taken_at"),
+    supabase.from("milestones").select("type, target_date, details").eq("plant_id", id),
   ]);
+  let milestones = milestonesResult.data ?? [];
+  // Plants checked before plans existed get theirs on first view.
+  if (!milestones.length && latest) {
+    await refreshPlantPlan(id, (profile?.hemisphere ?? "north") as Hemisphere);
+    milestones = (await supabase.from("milestones").select("type, target_date, details").eq("plant_id", id)).data ?? [];
+  }
+
+  // Time-lapse: whole-plant and check-in photos, each with the height estimated from it.
+  const heightByPhoto = new Map<string, number | null>();
+  history?.forEach((a) => (a.photo_ids as string[]).forEach((pid) => heightByPhoto.set(pid, a.estimated_height_cm)));
+  const framePhotos = (photos ?? []).filter((p) => p.kind === "whole" || p.kind === "checkin");
+  const { data: frameUrls } = framePhotos.length
+    ? await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(framePhotos.map((p) => p.storage_path), 3600)
+    : { data: [] };
+  const frames: Frame[] = framePhotos
+    .map((p, i) => ({ url: frameUrls?.[i]?.signedUrl ?? "", date: p.taken_at, heightCm: heightByPhoto.get(p.id) ?? null }))
+    .filter((f) => f.url);
+  const lastPhotoAt = photos?.length ? new Date(photos.at(-1)!.taken_at) : null;
+  const checkinDue = needsCheckin(lastPhotoAt, new Date());
   const waterDueToday =
     waterTask && new Date(waterTask.due_at).getTime() < endOfLocalDay(profile?.timezone ?? "UTC", new Date()).getTime();
   const ticked = new Set((ticks ?? []).map((t) => t.action_index));
@@ -87,6 +123,19 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           {plant.nickname}
         </h1>
         {plant.species_name && <p className="italic text-muted">{plant.species_name}</p>}
+
+        <Link
+          href={`/plants/${plant.id}/checkin`}
+          className={`mt-4 flex items-center justify-between rounded-2xl border p-3 text-sm ${
+            checkinDue ? "border-leaf bg-leaf-soft" : "border-border bg-surface"
+          }`}
+        >
+          <span>
+            📸 <b>{checkinDue ? "Weekly check-in due" : "New check-in"}</b>
+            {lastPhotoAt && <span className="text-muted"> · last photo {daysSince(lastPhotoAt, new Date())} days ago</span>}
+          </span>
+          <span aria-hidden>→</span>
+        </Link>
 
         {waterTask && waterDueToday && (
           <div className="mt-4">
@@ -138,6 +187,25 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
             </div>
           )}
         </div>
+
+        {history && history.length > 0 && (
+          <section className="mt-10">
+            <h2 className="text-lg font-semibold">Progress</h2>
+            <div className="mt-3 space-y-3">
+              <HealthTrend
+                points={history.map((a) => ({ date: a.created_at, health: a.health, heightCm: a.estimated_height_cm }))}
+              />
+              <Timelapse frames={frames} />
+            </div>
+          </section>
+        )}
+
+        <PlanSection
+          plantId={plant.id}
+          potCm={Number(plant.pot_diameter_cm)}
+          milestones={milestones}
+          fertilizer={care?.fertilizer ?? null}
+        />
 
         {care && (
           <section className="mt-10">

@@ -12,6 +12,9 @@
   --good: #2f8a4a;
   --warn: #c98a12;
   --bad: #c2413a;
+  /* Charts: validated against the light surface (chroma ≥ 0.1, contrast ≥ 3:1). */
+  --chart-line: #2e7d46;
+  --chart-grid: #e8e6df;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,6 +30,8 @@
     --good: #6cc983;
     --warn: #e5b04a;
     --bad: #ef7d74;
+    --chart-line: #7cc48d;
+    --chart-grid: #2b342b;
   }
 }
 
@@ -42,6 +47,8 @@
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
+  --color-chart-line: var(--chart-line);
+  --color-chart-grid: var(--chart-grid);
   --font-sans: var(--font-geist-sans);
 }
 

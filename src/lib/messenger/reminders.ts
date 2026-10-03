@@ -54,3 +54,22 @@ export function waterAnswerSummary(nickname: string, outcome: WaterOutcome, next
       return `⏰ ${name}: we'll remind you ${nextLabel}.`;
   }
 }
+
+export function repotNudgeMessage(nickname: string, potCm: number, reasons: string[]): string {
+  const why = reasons.length ? `\nWhy: ${reasons.map(escapeHtml).join("; ")}.` : "";
+  return (
+    `🪴 <b>Time to repot ${escapeHtml(nickname)}</b> in the next few days.\n` +
+    `Move it to a <b>${potCm} cm</b> pot with a drainage hole and fresh soil.${why}\n\n` +
+    `Afterwards, tap "I repotted it" on its page in the app.`
+  );
+}
+
+/** Links only work once the app has a public https address. */
+export function checkinNudgeMessage(nicknames: string[], appUrl?: string): string {
+  const names = nicknames.map((n) => `<b>${escapeHtml(n)}</b>`).join(", ");
+  const link = appUrl?.startsWith("https://") ? `\n\n<a href="${appUrl}">Open Love My Plants</a>` : "";
+  return (
+    `📸 <b>Weekly check-in</b>\nSnap a photo of ${names} to update the health check and grow the time-lapse. ` +
+    `Same spot and angle as last time works best.${link}`
+  );
+}

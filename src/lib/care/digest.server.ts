@@ -1,10 +1,12 @@
 import "server-only";
 import { chatForUser } from "@/lib/messenger/links.server";
 import { sendTelegramMessage, telegramConfigured } from "@/lib/messenger/telegram";
-import { waterReminderMessage, waterRemindersIntro } from "@/lib/messenger/reminders";
+import { checkinNudgeMessage, repotNudgeMessage, waterReminderMessage, waterRemindersIntro } from "@/lib/messenger/reminders";
 import { sendPushToUser } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isMemberActive } from "./access";
+import { CHECKIN_EVERY_DAYS, needsCheckin, REPOT_NOTICE_DAYS } from "./plan";
+import type { RepotDetails } from "./plan.server";
 import { endOfLocalDay, localTime, shouldSendDigest } from "./schedule";
 
 export interface DueWaterTask {
@@ -31,7 +33,7 @@ export async function runDailyDigest(now = new Date()) {
 
   const { data: profiles } = await admin
     .from("profiles")
-    .select("id, timezone, digest_time, last_digest_on")
+    .select("id, timezone, digest_time, last_digest_on, last_checkin_nudge_on")
     .in("id", userIds);
 
   let sent = 0;
@@ -41,6 +43,7 @@ export async function runDailyDigest(now = new Date()) {
 
     const due = await dueWaterTasksFor(profile.id, endOfLocalDay(profile.timezone, now), now);
     if (due.length && (await sendWaterReminders(profile.id, due, local.date))) sent++;
+    await sendCareNudges(profile.id, local.date, profile.last_checkin_nudge_on, now);
     await admin.from("profiles").update({ last_digest_on: local.date }).eq("id", profile.id);
   }
   return { users: profiles?.length ?? 0, sent };
@@ -74,6 +77,85 @@ export async function sendWaterReminders(userId: string, due: DueWaterTask[], lo
   return delivered || pushed > 0;
 }
 
+/** Sends one message on every connected channel (Telegram first, then browser push). */
+async function notifyUser(
+  userId: string,
+  msg: { html: string; push: { title: string; body: string; url: string; tag: string } },
+): Promise<boolean> {
+  let delivered = false;
+  const chatId = telegramConfigured() ? await chatForUser("telegram", userId) : null;
+  if (chatId) {
+    try {
+      await sendTelegramMessage(chatId, msg.html);
+      delivered = true;
+    } catch (error) {
+      console.error("telegram nudge failed", (error as Error).message);
+    }
+  }
+  return (await sendPushToUser(userId, msg.push)) > 0 || delivered;
+}
+
+/**
+ * Longer-term nudges, at most once each: a repot window opening within a week, and a
+ * weekly photo check-in for plants without a photo in the last 7 days.
+ */
+async function sendCareNudges(userId: string, localDate: string, lastCheckinNudgeOn: string | null, now: Date) {
+  const admin = createAdminClient();
+  const plants = await visiblePlantsFor(userId, now);
+  if (!plants.length) return;
+  const ids = plants.map((p) => p.id);
+  const name = (id: string) => plants.find((p) => p.id === id)!.nickname;
+
+  // Repot windows opening soon.
+  const soon = new Date(now.getTime() + REPOT_NOTICE_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const { data: repots } = await admin
+    .from("milestones")
+    .select("id, plant_id, details")
+    .in("plant_id", ids)
+    .eq("type", "repot")
+    .is("done_at", null)
+    .is("notified_at", null)
+    .lte("target_date", soon);
+  for (const m of repots ?? []) {
+    const details = m.details as RepotDetails;
+    const html = repotNudgeMessage(name(m.plant_id), details.recommendedPotCm, details.reasons);
+    await notifyUser(userId, {
+      html,
+      push: {
+        title: `🪴 Time to repot ${name(m.plant_id)}`,
+        body: `Move it to a ${details.recommendedPotCm} cm pot.`,
+        url: `/plants/${m.plant_id}`,
+        tag: `repot-${m.plant_id}`,
+      },
+    });
+    await admin.from("milestones").update({ notified_at: now.toISOString() }).eq("id", m.id);
+  }
+
+  // Weekly check-in, at most once a week.
+  const lastNudge = lastCheckinNudgeOn ? new Date(`${lastCheckinNudgeOn}T00:00:00Z`) : null;
+  if (lastNudge && new Date(`${localDate}T00:00:00Z`).getTime() - lastNudge.getTime() < CHECKIN_EVERY_DAYS * 86_400_000) return;
+  const { data: photos } = await admin
+    .from("photos")
+    .select("plant_id, taken_at")
+    .in("plant_id", ids)
+    .order("taken_at", { ascending: false });
+  const lastPhoto = new Map<string, Date>();
+  photos?.forEach((p) => lastPhoto.has(p.plant_id) || lastPhoto.set(p.plant_id, new Date(p.taken_at)));
+  const due = plants.filter((p) => needsCheckin(lastPhoto.get(p.id) ?? null, now));
+  if (!due.length) return;
+
+  await notifyUser(userId, {
+    html: checkinNudgeMessage(due.map((p) => p.nickname), process.env.APP_URL),
+    push: {
+      title: "📸 Weekly plant check-in",
+      body: `Snap ${due.map((p) => p.nickname).join(", ")} to see how they're growing.`,
+      url: "/",
+      tag: `checkin-${localDate}`,
+    },
+  });
+  await admin.from("profiles").update({ last_checkin_nudge_on: localDate }).eq("id", userId);
+}
+
 /** Active Care Circle memberships of a user (sitters only within their dates). */
 async function activeMemberships(userId: string, now: Date) {
   const { data: members } = await createAdminClient()
@@ -96,20 +178,24 @@ export async function userCanAccessPlant(userId: string, plantId: string, now = 
   return !!m && (m.role !== "sitter" || (m.plant_scope ?? []).includes(plantId));
 }
 
-export async function dueWaterTasksFor(userId: string, dueBefore: Date, now: Date): Promise<DueWaterTask[]> {
-  const admin = createAdminClient();
+/** Plants a user cares for right now: whole homes, or a sitter's scoped plants. */
+export async function visiblePlantsFor(userId: string, now: Date) {
   const active = await activeMemberships(userId, now);
   if (!active.length) return [];
-
-  const { data: plants } = await admin
+  const { data: plants } = await createAdminClient()
     .from("plants")
     .select("id, home_id, nickname")
     .in("home_id", active.map((m) => m.home_id))
     .neq("status", "archived");
-  const visible = (plants ?? []).filter((p) => {
+  return (plants ?? []).filter((p) => {
     const m = active.find((a) => a.home_id === p.home_id)!;
     return m.role !== "sitter" || (m.plant_scope ?? []).includes(p.id);
   });
+}
+
+export async function dueWaterTasksFor(userId: string, dueBefore: Date, now: Date): Promise<DueWaterTask[]> {
+  const admin = createAdminClient();
+  const visible = await visiblePlantsFor(userId, now);
   if (!visible.length) return [];
 
   const { data: tasks } = await admin

@@ -5,6 +5,7 @@ import { HealthBadge } from "@/components/report-card";
 import { StepList, type StepItem } from "@/components/step-list";
 import { WaterCard, type WaterCardProps } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
+import { needsCheckin } from "@/lib/care/plan";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
@@ -44,14 +45,14 @@ export default async function Home() {
       .order("created_at"),
     supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle(),
   ]);
-  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} />;
+  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} checkins={[]} />;
 
   const ids = plants.map((p) => p.id);
   const coverPath = (p: (typeof plants)[number]) =>
     (Array.isArray(p.cover) ? p.cover[0] : p.cover)?.storage_path as string | undefined;
   const paths = plants.map(coverPath).filter((x): x is string => !!x);
 
-  const [{ data: assessments }, { data: tasks }, { data: signed }] = await Promise.all([
+  const [{ data: assessments }, { data: tasks }, { data: signed }, { data: photos }] = await Promise.all([
     supabase
       .from("assessments")
       .select("id, plant_id, health, raw, created_at")
@@ -67,6 +68,7 @@ export default async function Home() {
     paths.length
       ? supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)
       : Promise.resolve({ data: [] as { path: string | null; signedUrl: string }[] }),
+    supabase.from("photos").select("plant_id, taken_at").in("plant_id", ids).order("taken_at", { ascending: false }),
   ]);
 
   // Both lists are sorted, so the first entry per plant is the latest check / soonest watering.
@@ -114,10 +116,16 @@ export default async function Home() {
     })
     .filter((g) => g.items.some((i) => !i.done));
 
+  const lastPhoto = firstBy(photos);
+  const checkins = plants
+    .filter((p) => needsCheckin(lastPhoto.has(p.id) ? new Date(lastPhoto.get(p.id)!.taken_at) : null, now))
+    .map((p) => ({ id: p.id, nickname: p.nickname }));
+
   return (
     <Today
       water={waterDue}
       steps={steps}
+      checkins={checkins}
       plants={plants.map((p) => ({
         id: p.id,
         nickname: p.nickname,
@@ -153,8 +161,18 @@ function Landing() {
   );
 }
 
-function Today({ plants, water, steps }: { plants: PlantRow[]; water: WaterCardProps[]; steps: StepGroup[] }) {
-  const nothingToDo = water.length === 0 && steps.length === 0;
+function Today({
+  plants,
+  water,
+  steps,
+  checkins,
+}: {
+  plants: PlantRow[];
+  water: WaterCardProps[];
+  steps: StepGroup[];
+  checkins: { id: string; nickname: string }[];
+}) {
+  const nothingToDo = water.length === 0 && steps.length === 0 && checkins.length === 0;
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
       <header className="flex items-center justify-between">
@@ -185,6 +203,20 @@ function Today({ plants, water, steps }: { plants: PlantRow[]; water: WaterCardP
               {water.map((w) => (
                 <WaterCard key={w.taskId} {...w} />
               ))}
+            </section>
+          )}
+
+          {checkins.length > 0 && (
+            <section className="mt-6 rounded-2xl border border-border bg-surface p-4" aria-label="Weekly check-ins">
+              <p className="font-semibold">📸 Weekly check-in</p>
+              <p className="mt-1 text-sm text-muted">One photo each updates the health check and the growth time-lapse.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {checkins.map((c) => (
+                  <Link key={c.id} href={`/plants/${c.id}/checkin`} className="rounded-full bg-leaf-soft px-3 py-1.5 text-sm font-medium">
+                    {c.nickname} →
+                  </Link>
+                ))}
+              </div>
             </section>
           )}
 

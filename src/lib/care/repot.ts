@@ -12,6 +12,8 @@ export interface RepotInput {
   rootsVisible?: boolean;
   drainsTooFast?: boolean;
   lastRepottedAt?: Date | null;
+  /** When the last repot is unknown: when we started tracking the plant (registration). */
+  trackingSince?: Date | null;
   repotIntervalMonths: number;
 }
 
@@ -72,6 +74,12 @@ export function evaluateRepot(input: RepotInput): RepotPlan {
       reasons.push(`Last repotted ${age} months ago`);
       mild++;
     }
+  } else if (input.trackingSince) {
+    const age = monthsBetween(input.trackingSince, input.now);
+    if (age >= input.repotIntervalMonths) {
+      reasons.push(`In the same pot for at least ${age} months`);
+      mild++;
+    }
   }
 
   const growing = isGrowingSeason(input.now, hemisphere);
@@ -87,7 +95,7 @@ export function evaluateRepot(input: RepotInput): RepotPlan {
     suggestedDate = growing ? input.now : nextSpring(input.now, hemisphere);
   } else {
     urgency = "later";
-    const base = input.lastRepottedAt ?? input.now;
+    const base = input.lastRepottedAt ?? input.trackingSince ?? input.now;
     const due = new Date(base);
     due.setMonth(due.getMonth() + input.repotIntervalMonths);
     suggestedDate = isGrowingSeason(due, hemisphere) ? due : nextSpring(due, hemisphere);
