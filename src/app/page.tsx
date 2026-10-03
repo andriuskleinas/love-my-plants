@@ -1,12 +1,20 @@
 import Link from "next/link";
 import { InstallCoach } from "@/components/install-coach";
+import { NotificationsCard } from "@/components/notifications-card";
 import { HealthBadge } from "@/components/report-card";
-import { dueLabel, isDue } from "@/lib/plants/format";
+import { StepList, type StepItem } from "@/components/step-list";
+import { WaterCard, type WaterCardProps } from "@/components/water-card";
+import { assessmentSchema } from "@/lib/ai/schemas";
+import { endOfLocalDay } from "@/lib/care/schedule";
+import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
 const isConfigured = () =>
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+/** Steps from checks older than this no longer show on Today. */
+const STEP_MAX_AGE_DAYS = 14;
 
 type PlantRow = {
   id: string;
@@ -18,19 +26,25 @@ type PlantRow = {
   waterDue: string | null;
 };
 
+type StepGroup = { plantId: string; nickname: string; assessmentId: string; items: StepItem[] };
+
 export default async function Home() {
   if (!isConfigured()) return <Landing />;
 
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
-  if (!claims?.claims) return <Landing />;
+  const userId = claims?.claims?.sub;
+  if (!userId) return <Landing />;
 
-  const { data: plants } = await supabase
-    .from("plants")
-    .select("id, nickname, species_name, status, cover:photos!plants_cover_photo_fk(storage_path)")
-    .neq("status", "archived")
-    .order("created_at");
-  if (!plants?.length) return <Today plants={[]} />;
+  const [{ data: plants }, { data: profile }] = await Promise.all([
+    supabase
+      .from("plants")
+      .select("id, nickname, species_name, status, cover:photos!plants_cover_photo_fk(storage_path)")
+      .neq("status", "archived")
+      .order("created_at"),
+    supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle(),
+  ]);
+  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} />;
 
   const ids = plants.map((p) => p.id);
   const coverPath = (p: (typeof plants)[number]) =>
@@ -38,10 +52,14 @@ export default async function Home() {
   const paths = plants.map(coverPath).filter((x): x is string => !!x);
 
   const [{ data: assessments }, { data: tasks }, { data: signed }] = await Promise.all([
-    supabase.from("assessments").select("plant_id, health").in("plant_id", ids).order("created_at", { ascending: false }),
+    supabase
+      .from("assessments")
+      .select("id, plant_id, health, raw, created_at")
+      .in("plant_id", ids)
+      .order("created_at", { ascending: false }),
     supabase
       .from("care_tasks")
-      .select("plant_id, due_at")
+      .select("id, plant_id, title, detail, due_at")
       .in("plant_id", ids)
       .eq("type", "water")
       .in("status", ["pending", "snoozed"])
@@ -57,19 +75,56 @@ export default async function Home() {
     rows?.forEach((r) => map.has(r.plant_id) || map.set(r.plant_id, r));
     return map;
   };
-  const health = firstBy(assessments);
+  const latest = firstBy(assessments);
   const water = firstBy(tasks);
   const urls = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+  const byId = new Map(plants.map((p) => [p.id, p]));
+  const photoFor = (plantId: string) => urls.get(coverPath(byId.get(plantId)!) ?? "") ?? null;
+
+  // Watering due by the end of the user's local day.
+  const now = new Date();
+  const dueBefore = endOfLocalDay(profile?.timezone ?? "UTC", now).getTime();
+  const waterDue: WaterCardProps[] = (tasks ?? [])
+    .filter((t) => new Date(t.due_at).getTime() < dueBefore)
+    .map((t) => ({
+      taskId: t.id,
+      plantId: t.plant_id,
+      nickname: byId.get(t.plant_id)!.nickname,
+      title: t.title,
+      detail: t.detail,
+      dueAt: t.due_at,
+      photoUrl: photoFor(t.plant_id),
+    }));
+
+  // Recent AI steps (watering is handled by the reminder above), minus finished groups.
+  const recent = [...latest.values()].filter(
+    (a) => now.getTime() - new Date(a.created_at).getTime() < STEP_MAX_AGE_DAYS * 86_400_000,
+  );
+  const { data: ticks } = recent.length
+    ? await supabase.from("care_events").select("assessment_id, action_index").in("assessment_id", recent.map((a) => a.id))
+    : { data: [] };
+  const ticked = new Set((ticks ?? []).map((t) => `${t.assessment_id}:${t.action_index}`));
+  const steps: StepGroup[] = recent
+    .map((a) => {
+      const actions = assessmentSchema.safeParse(a.raw).data?.actions ?? [];
+      const items = actions
+        .map((act, index) => ({ index, step: act.step, why: act.why, taskType: act.taskType, done: ticked.has(`${a.id}:${index}`) }))
+        .filter((i) => i.taskType !== "water");
+      return { plantId: a.plant_id, nickname: byId.get(a.plant_id)!.nickname, assessmentId: a.id, items };
+    })
+    .filter((g) => g.items.some((i) => !i.done));
 
   return (
     <Today
+      water={waterDue}
+      steps={steps}
       plants={plants.map((p) => ({
         id: p.id,
         nickname: p.nickname,
         species_name: p.species_name,
         status: p.status,
-        photoUrl: urls.get(coverPath(p) ?? "") ?? null,
-        health: health.get(p.id)?.health ?? null,
+        photoUrl: photoFor(p.id),
+        health: latest.get(p.id)?.health ?? null,
         waterDue: water.get(p.id)?.due_at ?? null,
       }))}
     />
@@ -98,12 +153,19 @@ function Landing() {
   );
 }
 
-function Today({ plants }: { plants: PlantRow[] }) {
+function Today({ plants, water, steps }: { plants: PlantRow[]; water: WaterCardProps[]; steps: StepGroup[] }) {
+  const nothingToDo = water.length === 0 && steps.length === 0;
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
-      <h1 className="text-2xl font-semibold">Today</h1>
-      <div className="mt-4">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Today</h1>
+        <Link href="/settings" aria-label="Settings" className="rounded-full p-2 text-xl text-muted">
+          ⚙️
+        </Link>
+      </header>
+      <div className="mt-4 space-y-3">
         <InstallCoach />
+        {plants.length > 0 && <NotificationsCard compact />}
       </div>
 
       {plants.length === 0 ? (
@@ -113,40 +175,61 @@ function Today({ plants }: { plants: PlantRow[] }) {
           <p className="mt-2 text-muted">Take a photo and we&apos;ll tell you how it&apos;s doing.</p>
         </section>
       ) : (
-        <ul className="mt-6 space-y-3">
-          {plants.map((p) => {
-            const due = p.waterDue ? new Date(p.waterDue) : null;
-            const thirsty = due != null && isDue(due);
-            return (
-              <li key={p.id}>
-                <Link
-                  href={`/plants/${p.id}`}
-                  className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-3"
-                >
-                  {p.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                    <img src={p.photoUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-                  ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-2xl">🪴</div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">
-                      {p.status === "er" && "🚨 "}
-                      {p.nickname}
-                    </p>
-                    {p.species_name && <p className="truncate text-sm italic text-muted">{p.species_name}</p>}
-                    {due && (
-                      <p className={`mt-0.5 text-sm ${thirsty ? "font-medium text-terracotta" : "text-muted"}`}>
-                        💧 {thirsty ? "Needs water" : "Water"} {dueLabel(due)}
-                      </p>
-                    )}
-                  </div>
-                  {p.health != null && <HealthBadge value={p.health} />}
+        <>
+          {nothingToDo && (
+            <p className="mt-6 rounded-2xl bg-leaf-soft p-4 text-center">🌿 Nothing to do today. Your plants are all set.</p>
+          )}
+
+          {water.length > 0 && (
+            <section className="mt-6 space-y-3" aria-label="Watering">
+              {water.map((w) => (
+                <WaterCard key={w.taskId} {...w} />
+              ))}
+            </section>
+          )}
+
+          {steps.map((g) => (
+            <section key={g.assessmentId} className="mt-6">
+              <h2 className="mb-2 font-semibold">
+                <Link href={`/plants/${g.plantId}`} className="hover:underline">
+                  {g.nickname}
                 </Link>
-              </li>
-            );
-          })}
-        </ul>
+              </h2>
+              <StepList plantId={g.plantId} assessmentId={g.assessmentId} items={g.items} />
+            </section>
+          ))}
+
+          <h2 className="mt-10 text-lg font-semibold">My plants</h2>
+          <ul className="mt-3 space-y-3">
+            {plants.map((p) => {
+              const due = p.waterDue ? new Date(p.waterDue) : null;
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/plants/${p.id}`}
+                    className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-3"
+                  >
+                    {p.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                      <img src={p.photoUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-2xl">🪴</div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">
+                        {p.status === "er" && "🚨 "}
+                        {p.nickname}
+                      </p>
+                      {p.species_name && <p className="truncate text-sm italic text-muted">{p.species_name}</p>}
+                      {due && <p className="mt-0.5 text-sm text-muted">💧 Water {dueLabel(due)}</p>}
+                    </div>
+                    {p.health != null && <HealthBadge value={p.health} />}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       <Link

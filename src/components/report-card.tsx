@@ -1,6 +1,9 @@
 import { LOW_CONFIDENCE, SCORE_KEYS, SCORE_LABELS, type Assessment } from "@/lib/ai/schemas";
 
-type Props = Pick<Assessment, "scores" | "issues" | "actions">;
+type Props = Pick<Assessment, "scores" | "issues" | "actions"> & {
+  /** Replaces the read-only step list, e.g. with tickable steps. */
+  today?: React.ReactNode;
+};
 
 export function scoreTone(value: number) {
   if (value >= 70) return { bar: "bg-good", text: "text-good", label: "Good" };
@@ -45,7 +48,7 @@ export function TodaySteps({ actions }: Pick<Assessment, "actions">) {
   );
 }
 
-export function ReportCard({ scores, issues, actions }: Props) {
+export function ReportCard({ scores, issues, actions, today }: Props) {
   const health = scores.health;
   const rest = SCORE_KEYS.filter((k) => k !== "health");
 
@@ -62,7 +65,7 @@ export function ReportCard({ scores, issues, actions }: Props) {
       <section>
         <h2 className="text-lg font-semibold">Today</h2>
         <div className="mt-3">
-          <TodaySteps actions={actions} />
+          {today ?? <TodaySteps actions={actions} />}
         </div>
       </section>
 

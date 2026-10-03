@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ReportCard } from "@/components/report-card";
+import { StepList } from "@/components/step-list";
+import { WaterCard } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
+import { endOfLocalDay } from "@/lib/care/schedule";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -21,14 +24,14 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const [{ data: latest }, { data: waterTask }, { data: care }] = await Promise.all([
     supabase
       .from("assessments")
-      .select("raw, created_at")
+      .select("id, raw, created_at")
       .eq("plant_id", id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
       .from("care_tasks")
-      .select("title, due_at")
+      .select("id, title, detail, due_at")
       .eq("plant_id", id)
       .eq("type", "water")
       .in("status", ["pending", "snoozed"])
@@ -49,6 +52,17 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     ? (await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(cover.storage_path, 3600)).data?.signedUrl
     : null;
   const assessment = latest ? assessmentSchema.safeParse(latest.raw) : null;
+
+  const { data: claims } = await supabase.auth.getClaims();
+  const [{ data: profile }, { data: ticks }] = await Promise.all([
+    supabase.from("profiles").select("timezone").eq("id", claims?.claims?.sub ?? "").maybeSingle(),
+    latest
+      ? supabase.from("care_events").select("action_index").eq("assessment_id", latest.id)
+      : Promise.resolve({ data: [] as { action_index: number }[] }),
+  ]);
+  const waterDueToday =
+    waterTask && new Date(waterTask.due_at).getTime() < endOfLocalDay(profile?.timezone ?? "UTC", new Date()).getTime();
+  const ticked = new Set((ticks ?? []).map((t) => t.action_index));
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 pb-16">
@@ -74,7 +88,20 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
         </h1>
         {plant.species_name && <p className="italic text-muted">{plant.species_name}</p>}
 
-        {waterTask && (
+        {waterTask && waterDueToday && (
+          <div className="mt-4">
+            <WaterCard
+              taskId={waterTask.id}
+              plantId={plant.id}
+              nickname={plant.nickname}
+              title={waterTask.title}
+              detail={waterTask.detail}
+              dueAt={waterTask.due_at}
+              showPlantLink={false}
+            />
+          </div>
+        )}
+        {waterTask && !waterDueToday && (
           <p className="mt-4 rounded-2xl bg-leaf-soft p-3 text-sm">
             💧 Next watering <b>{dueLabel(new Date(waterTask.due_at))}</b>: {waterTask.title.toLowerCase()}
           </p>
@@ -90,6 +117,18 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
                 scores={assessment.data.scores}
                 issues={assessment.data.issues}
                 actions={assessment.data.actions}
+                today={
+                  <StepList
+                    plantId={plant.id}
+                    assessmentId={latest!.id}
+                    items={assessment.data.actions.map((a, index) => ({
+                      index,
+                      step: a.step,
+                      why: a.why,
+                      done: ticked.has(index),
+                    }))}
+                  />
+                }
               />
             </>
           ) : (

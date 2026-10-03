@@ -123,6 +123,45 @@ export function applySoilFeedback(
   }
 }
 
+export type WaterOutcome = SoilFeedback | "snooze";
+
+export interface WaterPlan {
+  watered: boolean;
+  learnedFactor: number;
+  intervalDays: number;
+  nextDueAt: Date;
+}
+
+/**
+ * What happens when the owner answers a watering reminder:
+ * - dry: they water now; next reminder one interval away.
+ * - dry_drooping: they water now, and future intervals get shorter.
+ * - damp: no water; check again in 2 days, and future intervals get longer.
+ * - snooze: no water, no learning; ask again tomorrow.
+ */
+export function planAfterWaterReminder(
+  outcome: WaterOutcome,
+  input: Omit<WateringInput, "learnedFactor"> & { learnedFactor: number },
+): WaterPlan {
+  const now = input.date;
+  if (outcome === "snooze") {
+    return {
+      watered: false,
+      learnedFactor: input.learnedFactor,
+      intervalDays: wateringIntervalDays(input),
+      nextDueAt: new Date(now.getTime() + DAY_MS),
+    };
+  }
+  const feedback = applySoilFeedback(input.learnedFactor, outcome, now);
+  const intervalDays = wateringIntervalDays({ ...input, learnedFactor: feedback.learnedFactor });
+  return {
+    watered: outcome !== "damp",
+    learnedFactor: feedback.learnedFactor,
+    intervalDays,
+    nextDueAt: feedback.snoozeUntil ?? nextWaterAt(now, intervalDays),
+  };
+}
+
 /**
  * First watering reminder for a newly registered plant, when we don't know when it was
  * last watered: thirsty-looking plants are due today, others part-way through an interval.
