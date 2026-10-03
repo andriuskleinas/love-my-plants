@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 
 type State = "loading" | "unavailable" | "off" | "waiting" | "on";
@@ -14,6 +15,7 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [link, setLink] = useState<{ url: string; code: string; bot: string } | null>(null);
+  const [qrSvg, setQrSvg] = useState<string | null>(null);
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -35,7 +37,10 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
     if (!res.ok) return setMessage(json.error ?? "Couldn't start. Please try again.");
 
     setLink(json);
-    window.open(json.url, "_blank", "noopener");
+    // On a computer, Telegram usually lives on the phone: show a QR code to scan.
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    if (touch) window.open(json.url, "_blank", "noopener");
+    else setQrSvg(await QRCode.toString(json.url, { type: "svg", margin: 1, width: 180 }));
     setState("waiting");
     if (polling.current) clearInterval(polling.current);
     // Wait for the user to press Start in Telegram (link is valid for 15 minutes).
@@ -80,14 +85,36 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
       {state === "off" && <p className="mt-1 text-muted">Get a message on days a plant needs water, and answer with one tap.</p>}
       {state === "waiting" && link && (
         <div className="mt-2 space-y-2 text-muted">
+          {qrSvg ? (
+            <>
+              <p>
+                <b className="text-foreground">Scan with your phone camera</b>, open Telegram, and press <b>Start</b>.
+              </p>
+              <div
+                className="mx-auto w-[180px] overflow-hidden rounded-xl bg-white p-1"
+                aria-label="QR code that opens the bot in Telegram"
+                role="img"
+                dangerouslySetInnerHTML={{ __html: qrSvg }}
+              />
+              <p>
+                Telegram on this computer?{" "}
+                <a href={link.url} target="_blank" rel="noopener" className="font-medium text-leaf">
+                  Open @{link.bot}
+                </a>
+              </p>
+            </>
+          ) : (
+            <p>
+              Telegram should open. Press <b>Start</b> in the chat with{" "}
+              <a href={link.url} target="_blank" rel="noopener" className="font-medium text-leaf">
+                @{link.bot}
+              </a>
+              .
+            </p>
+          )}
           <p>
-            Telegram should open. Press <b>Start</b> in the chat with{" "}
-            <a href={link.url} target="_blank" rel="noopener" className="font-medium text-leaf">
-              @{link.bot}
-            </a>
-            .
+            Still not connected? In Telegram, search <b className="text-foreground">@{link.bot}</b> and send it this code:
           </p>
-          <p>Not connected after Start? Send the bot this code:</p>
           <p className="select-all rounded-xl bg-background py-3 text-center font-mono text-2xl font-semibold tracking-widest text-foreground">
             {link.code}
           </p>
