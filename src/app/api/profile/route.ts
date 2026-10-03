@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const profileSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  displayName: z.string().trim().min(1).max(40).optional(),
   hemisphere: z.enum(["north", "south"]).optional(),
   location: z
     .object({
@@ -26,6 +27,7 @@ export async function PATCH(request: NextRequest) {
     if (!parsed.success) throw new HttpError(400, "Invalid settings.");
     const update: Record<string, string | number | null> = {};
     if (parsed.data.digestTime) update.digest_time = parsed.data.digestTime;
+    if (parsed.data.displayName) update.display_name = parsed.data.displayName;
     if (parsed.data.hemisphere) update.hemisphere = parsed.data.hemisphere;
     const loc = parsed.data.location;
     if (loc) {
@@ -40,6 +42,10 @@ export async function PATCH(request: NextRequest) {
       update.location_name = null;
     }
     const { error } = await supabase.from("profiles").update(update).eq("id", userId);
+    // Keep the name shown in the Care Circle in sync.
+    if (!error && parsed.data.displayName) {
+      await supabase.from("home_members").update({ display_name: parsed.data.displayName }).eq("user_id", userId);
+    }
     if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {

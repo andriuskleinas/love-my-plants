@@ -8,6 +8,7 @@ import { assessmentSchema } from "@/lib/ai/schemas";
 import { needsCheckin } from "@/lib/care/plan";
 import { rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { endOfLocalDay } from "@/lib/care/schedule";
+import { loadTrip, type TripView } from "@/lib/care/vacation.server";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -46,7 +47,8 @@ export default async function Home() {
       .order("created_at"),
     supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle(),
   ]);
-  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} checkins={[]} rescues={[]} />;
+  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} checkins={[]} rescues={[]} trip={null} />;
+  const trip = await loadTrip(supabase, userId);
 
   const ids = plants.map((p) => p.id);
   const coverPath = (p: (typeof plants)[number]) =>
@@ -141,6 +143,7 @@ export default async function Home() {
       steps={steps}
       checkins={checkins}
       rescues={rescues}
+      trip={trip}
       plants={plants.map((p) => ({
         id: p.id,
         nickname: p.nickname,
@@ -182,23 +185,52 @@ function Today({
   steps,
   checkins,
   rescues,
+  trip,
 }: {
   plants: PlantRow[];
   water: WaterCardProps[];
   steps: StepGroup[];
   checkins: { id: string; nickname: string }[];
   rescues: { id: string; nickname: string; text: string }[];
+  trip: TripView | null;
 }) {
+  const tripLeft = trip ? trip.items.filter((i) => !i.done && i.when !== "return").length : 0;
+  const tripEnd = trip ? new Date(trip.endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : "";
   const nothingToDo = water.length === 0 && steps.length === 0 && checkins.length === 0 && rescues.length === 0;
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Today</h1>
-        <Link href="/settings" aria-label="Settings" className="rounded-full p-2 text-xl text-muted">
-          ⚙️
-        </Link>
+        <nav className="flex gap-1 text-xl">
+          <Link href="/vacation" aria-label="Going away" className="rounded-full p-2">
+            ✈️
+          </Link>
+          <Link href="/circle" aria-label="Care Circle" className="rounded-full p-2">
+            👥
+          </Link>
+          <Link href="/settings" aria-label="Settings" className="rounded-full p-2">
+            ⚙️
+          </Link>
+        </nav>
       </header>
       <div className="mt-4 space-y-3">
+        {trip && (
+          <Link href="/vacation" className="flex items-center justify-between rounded-2xl border border-border bg-leaf-soft p-4 text-sm">
+            <span>
+              ✈️{" "}
+              {trip.status === "active" ? (
+                <>
+                  <b>You&apos;re away until {tripEnd}.</b> Your reminders are paused.
+                </>
+              ) : (
+                <>
+                  <b>Trip coming up.</b> {tripLeft ? `${tripLeft} prep step${tripLeft > 1 ? "s" : ""} left` : "All prepped!"}
+                </>
+              )}
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+        )}
         <InstallCoach />
         {plants.length > 0 && <TelegramCard compact />}
       </div>

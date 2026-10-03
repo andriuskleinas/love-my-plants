@@ -16,7 +16,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("digest_time, hemisphere, timezone, location_name")
+    .select("digest_time, hemisphere, timezone, location_name, display_name")
     .eq("id", userId)
     .maybeSingle();
 
@@ -42,6 +42,7 @@ export default async function SettingsPage() {
         digestTime={(profile?.digest_time ?? "09:00").slice(0, 5)}
         hemisphere={(profile?.hemisphere ?? "north") as "north" | "south"}
         locationName={profile?.location_name ?? null}
+        displayName={profile?.display_name ?? ""}
         timezone={profile?.timezone ?? "UTC"}
         email={(claims?.claims?.email as string | undefined) ?? null}
       />

@@ -39,6 +39,8 @@ export async function answerWaterTask(
   taskId: string,
   outcome: WaterOutcome,
   now = new Date(),
+  /** For plant-sitters without an account: their membership, and whose settings to use. */
+  sitter?: { memberId: string },
 ) {
   const { data: task } = await supabase
     .from("care_tasks")
@@ -55,7 +57,7 @@ export async function answerWaterTask(
       ? supabase.from("species_profiles").select("base_water_interval_days").eq("id", plant.species_id).maybeSingle()
       : Promise.resolve({ data: null }),
     supabase.from("profiles").select("hemisphere, latitude").eq("id", userId).maybeSingle(),
-    memberIdFor(supabase, userId, plant.home_id),
+    sitter ? Promise.resolve(sitter.memberId) : memberIdFor(supabase, userId, plant.home_id),
   ]);
 
   const plan = planAfterWaterReminder(outcome, {

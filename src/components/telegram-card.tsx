@@ -10,7 +10,16 @@ type State = "loading" | "unavailable" | "off" | "waiting" | "on";
  * Connect Telegram for watering reminders. `compact` is the Today-screen prompt:
  * hidden once connected, with Settings holding the full controls.
  */
-export function TelegramCard({ compact = false }: { compact?: boolean }) {
+export function TelegramCard({
+  compact = false,
+  endpoint = "/api/messenger/link",
+  sitter = false,
+}: {
+  compact?: boolean;
+  /** Plant-sitters use their link's own endpoint. */
+  endpoint?: string;
+  sitter?: boolean;
+}) {
   const [state, setState] = useState<State>("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -19,19 +28,19 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    fetch("/api/messenger/link")
+    fetch(endpoint)
       .then((r) => r.json())
       .then((j) => setState(!j.available ? "unavailable" : j.connected ? "on" : "off"))
       .catch(() => setState("unavailable"));
     return () => {
       if (polling.current) clearInterval(polling.current);
     };
-  }, []);
+  }, [endpoint]);
 
   async function connect() {
     setBusy(true);
     setMessage(null);
-    const res = await fetch("/api/messenger/link", { method: "POST" });
+    const res = await fetch(endpoint, { method: "POST" });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) return setMessage(json.error ?? "Couldn't start. Please try again.");
@@ -47,7 +56,7 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
     let tries = 0;
     polling.current = setInterval(async () => {
       tries++;
-      const status = await fetch("/api/messenger/link").then((r) => r.json()).catch(() => null);
+      const status = await fetch(endpoint).then((r) => r.json()).catch(() => null);
       if (status?.connected) {
         clearInterval(polling.current!);
         setState("on");
@@ -81,7 +90,12 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`rounded-2xl border border-border p-4 text-sm ${compact ? "bg-leaf-soft" : "bg-surface"}`}>
       <p className="font-semibold">✈️ Reminders in Telegram</p>
-      {state === "on" && <p className="mt-1 text-muted">Connected. You&apos;ll get a message on days a plant needs water, with buttons to answer.</p>}
+      {state === "on" && (
+        <p className="mt-1 text-muted">
+          Connected ✓ You&apos;ll get a message on days a plant needs water, with buttons to answer.
+          {sitter && " You can also send /today to the bot any time."}
+        </p>
+      )}
       {state === "off" && <p className="mt-1 text-muted">Get a message on days a plant needs water, and answer with one tap.</p>}
       {state === "waiting" && link && (
         <div className="mt-2 space-y-2 text-muted">
@@ -127,7 +141,7 @@ export function TelegramCard({ compact = false }: { compact?: boolean }) {
             {state === "waiting" ? "New code" : "Connect Telegram"}
           </button>
         )}
-        {state === "on" && (
+        {state === "on" && !sitter && (
           <>
             <button disabled={busy} onClick={sendTest} className={`${button} bg-leaf text-background`}>
               Send a test

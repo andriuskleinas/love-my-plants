@@ -1,11 +1,14 @@
 import "server-only";
 import { dueWaterTasksFor, userCanAccessPlant } from "@/lib/care/digest.server";
 import { endOfLocalDay } from "@/lib/care/schedule";
+import { answerAsSitter, dueWaterTasksForSitter, ownerSettings } from "@/lib/care/sitter.server";
 import { answerWaterTask } from "@/lib/care/tasks.server";
+import { sitterForMember } from "@/lib/circle.server";
 import { dueLabel } from "@/lib/plants/format";
 import { createAdminClient } from "@/lib/supabase/server";
-import { consumeLinkToken, normalizeLinkCode, unlinkChat, userForChat } from "./links.server";
+import { consumeLinkToken, normalizeLinkCode, ownerForChat, unlinkChat, userForChat } from "./links.server";
 import { decodeWaterAnswer, waterAnswerSummary, waterReminderMessage } from "./reminders";
+import { escapeHtml } from "./types";
 import { answerTelegramCallback, editTelegramMessage, sendTelegramMessage } from "./telegram";
 
 // Subset of https://core.telegram.org/bots/api#update that we use.
@@ -58,10 +61,20 @@ const SEND_CODE =
 
 async function handleStart(chatId: string, token?: string) {
   if (token) {
-    const userId = await consumeLinkToken(token, "telegram", chatId);
+    const owner = await consumeLinkToken(token, "telegram", chatId);
+    if (owner?.memberId) {
+      const sitter = await sitterForMember(owner.memberId);
+      const until = sitter?.endsAt.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+      await sendTelegramMessage(
+        chatId,
+        `✅ <b>Connected, ${escapeHtml(sitter?.name ?? "plant-sitter")}!</b> Thanks for looking after these plants. ` +
+          `You'll get a message on days one needs water${until ? ` (until ${until})` : ""}, with buttons to answer.\n\nSend /today any time.`,
+      );
+      return;
+    }
     await sendTelegramMessage(
       chatId,
-      userId
+      owner
         ? "✅ <b>Connected!</b> Your watering reminders will arrive here at your reminder time.\n\nSend /today to see what needs water now."
         : "That code didn't work. It may have expired (codes last 15 minutes). In the app, tap <b>Connect Telegram</b> again for a new one.",
     );
@@ -82,10 +95,21 @@ async function userTimeZone(userId: string) {
 }
 
 async function handleToday(chatId: string) {
-  const userId = await userForChat("telegram", chatId);
-  if (!userId) return handleStart(chatId);
+  const owner = await ownerForChat("telegram", chatId);
+  if (!owner) return handleStart(chatId);
   const now = new Date();
-  const due = await dueWaterTasksFor(userId, endOfLocalDay(await userTimeZone(userId), now), now);
+  let due;
+  if (owner.memberId) {
+    const sitter = await sitterForMember(owner.memberId, now);
+    if (!sitter || sitter.status !== "active") {
+      await sendTelegramMessage(chatId, "Your plant-sitting dates aren't active right now. Thank you for helping! 🌿");
+      return;
+    }
+    due = await dueWaterTasksForSitter(sitter, endOfLocalDay((await ownerSettings(sitter.ownerId)).timeZone, now));
+  } else {
+    const userId = owner.userId!;
+    due = await dueWaterTasksFor(userId, endOfLocalDay(await userTimeZone(userId), now), now);
+  }
   if (!due.length) {
     await sendTelegramMessage(chatId, "🌿 Nothing needs water today. Your plants are all set.");
     return;
@@ -104,11 +128,13 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
     return;
   }
 
-  const userId = await userForChat("telegram", chatId);
-  if (!userId) {
-    await answerTelegramCallback(cb.id, "This chat isn't connected to an account anymore.");
+  const owner = await ownerForChat("telegram", chatId);
+  if (!owner) {
+    await answerTelegramCallback(cb.id, "This chat isn't connected anymore.");
     return;
   }
+  if (owner.memberId) return handleSitterCallback(cb, chatId, owner.memberId, answer);
+  const userId = owner.userId!;
 
   // The bot runs with the service role, so check Care Circle access explicitly.
   const admin = createAdminClient();
@@ -143,4 +169,38 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
     cb.message.message_id,
     waterAnswerSummary(nickname, answer.outcome, dueLabel(new Date(result.nextDueAt), now)),
   );
+}
+
+/** A plant-sitter tapped a reminder button. */
+async function handleSitterCallback(
+  cb: NonNullable<TelegramUpdate["callback_query"]>,
+  chatId: string,
+  memberId: string,
+  answer: NonNullable<ReturnType<typeof decodeWaterAnswer>>,
+) {
+  const now = new Date();
+  const sitter = await sitterForMember(memberId, now);
+  if (!sitter || sitter.status !== "active") {
+    await answerTelegramCallback(cb.id, "Your plant-sitting dates aren't active right now.");
+    return;
+  }
+  // Already handled (by the owner or an earlier tap)?
+  const { data: task } = await createAdminClient().from("care_tasks").select("due_at").eq("id", answer.taskId).maybeSingle();
+  const { timeZone } = await ownerSettings(sitter.ownerId);
+  if (task && new Date(task.due_at).getTime() > endOfLocalDay(timeZone, now).getTime()) {
+    await answerTelegramCallback(cb.id, "Already done ✓");
+    await editTelegramMessage(chatId, cb.message!.message_id, `✓ Already taken care of. Next: ${dueLabel(new Date(task.due_at), now)}.`);
+    return;
+  }
+  try {
+    const result = await answerAsSitter(sitter, answer.taskId, answer.outcome, now);
+    await answerTelegramCallback(cb.id, "Saved ✓ Thank you!");
+    await editTelegramMessage(
+      chatId,
+      cb.message!.message_id,
+      waterAnswerSummary(result.nickname, answer.outcome, dueLabel(new Date(result.nextDueAt), now)),
+    );
+  } catch (error) {
+    await answerTelegramCallback(cb.id, (error as Error).message.slice(0, 180));
+  }
 }

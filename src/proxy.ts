@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Paths reachable without an account: landing, login, auth callbacks, sitter links, webhooks.
-const PUBLIC_PATHS = ["/login", "/auth", "/sit", "/api/telegram", "/api/cron", "/icons", "/manifest.webmanifest", "/sw.js"];
+const PUBLIC_PATHS = ["/login", "/auth", "/sit", "/api/sit", "/api/telegram", "/api/cron", "/icons", "/manifest.webmanifest", "/sw.js"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

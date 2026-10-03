@@ -11,14 +11,16 @@ export function SettingsForm(props: {
   digestTime: string;
   hemisphere: "north" | "south";
   locationName: string | null;
+  displayName: string;
   timezone: string;
   email: string | null;
 }) {
   const router = useRouter();
   const [digestTime, setDigestTime] = useState(props.digestTime);
   const [saved, setSaved] = useState<string | null>(null);
+  const [name, setName] = useState(props.displayName);
 
-  async function save(update: { digestTime?: string }) {
+  async function save(update: { digestTime?: string; displayName?: string }) {
     setSaved(null);
     const res = await fetch("/api/profile", {
       method: "PATCH",
@@ -38,6 +40,31 @@ export function SettingsForm(props: {
 
   return (
     <div className="mt-6 space-y-6">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) save({ displayName: name.trim() });
+        }}
+        className="rounded-2xl border border-border bg-surface p-4 text-sm"
+      >
+        <label htmlFor="name" className="font-semibold">
+          Your name
+        </label>
+        <p className="mt-1 text-muted">Shown to your household and plant-sitters.</p>
+        <div className="mt-3 flex gap-2">
+          <input
+            id="name"
+            value={name}
+            maxLength={40}
+            onChange={(e) => setName(e.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-leaf"
+          />
+          <button disabled={!name.trim() || name.trim() === props.displayName} className="rounded-xl bg-leaf px-4 font-medium text-background disabled:opacity-40">
+            Save
+          </button>
+        </div>
+      </form>
+
       <div className="rounded-2xl border border-border bg-surface p-4 text-sm">
         <label htmlFor="digest" className="font-semibold">
           Reminder time

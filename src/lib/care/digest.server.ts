@@ -8,12 +8,15 @@ import {
   waterReminderMessage,
   waterRemindersIntro,
 } from "@/lib/messenger/reminders";
+import { escapeHtml } from "@/lib/messenger/types";
+import { notifyUser } from "@/lib/notify.server";
 import { sendPushToUser } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isMemberActive } from "./access";
 import { CHECKIN_EVERY_DAYS, needsCheckin, REPOT_NOTICE_DAYS } from "./plan";
 import type { RepotDetails } from "./plan.server";
 import { planLength, rescueDay, stepsDueOn, type RescueStep } from "./rescue";
+import { runSitterDigest } from "./sitter.server";
 import { endOfLocalDay, localTime, shouldSendDigest } from "./schedule";
 
 export interface DueWaterTask {
@@ -48,13 +51,19 @@ export async function runDailyDigest(now = new Date()) {
     const local = localTime(profile.timezone, now);
     if (!shouldSendDigest({ local, digestTime: profile.digest_time, lastDigestOn: profile.last_digest_on })) continue;
 
-    const due = await dueWaterTasksFor(profile.id, endOfLocalDay(profile.timezone, now), now);
-    if (due.length && (await sendWaterReminders(profile.id, due, local.date))) sent++;
-    await sendRescueUpdates(profile.id, profile.timezone, now);
-    await sendCareNudges(profile.id, local.date, profile.last_checkin_nudge_on, now);
+    // Away on vacation: no care reminders (a sitter or the prep covers it), but still
+    // hear about waterings a sitter has missed.
+    if (!(await isOnVacation(profile.id, now))) {
+      const due = await dueWaterTasksFor(profile.id, endOfLocalDay(profile.timezone, now), now);
+      if (due.length && (await sendWaterReminders(profile.id, due, local.date))) sent++;
+      await sendRescueUpdates(profile.id, profile.timezone, now);
+      await sendCareNudges(profile.id, local.date, profile.last_checkin_nudge_on, now);
+    }
+    await sendMissedSitterAlerts(profile.id, now);
     await admin.from("profiles").update({ last_digest_on: local.date }).eq("id", profile.id);
   }
-  return { users: profiles?.length ?? 0, sent };
+  const sitters = await runSitterDigest(now);
+  return { users: profiles?.length ?? 0, sent, sitters };
 }
 
 /** Sends today's watering reminders on every connected channel. Returns true if any arrived. */
@@ -85,22 +94,48 @@ export async function sendWaterReminders(userId: string, due: DueWaterTask[], lo
   return delivered || pushed > 0;
 }
 
-/** Sends one message on every connected channel (Telegram first, then browser push). */
-async function notifyUser(
-  userId: string,
-  msg: { html: string; push: { title: string; body: string; url: string; tag: string } },
-): Promise<boolean> {
-  let delivered = false;
-  const chatId = telegramConfigured() ? await chatForUser("telegram", userId) : null;
-  if (chatId) {
-    try {
-      await sendTelegramMessage(chatId, msg.html);
-      delivered = true;
-    } catch (error) {
-      console.error("telegram nudge failed", (error as Error).message);
+export async function isOnVacation(userId: string, now: Date): Promise<boolean> {
+  const iso = now.toISOString();
+  const { count } = await createAdminClient()
+    .from("vacations")
+    .select("id", { count: "exact", head: true })
+    .eq("created_by", userId)
+    .lte("starts_at", iso)
+    .gte("ends_at", iso);
+  return (count ?? 0) > 0;
+}
+
+/** Owner alert: a plant in an active sitter's care is more than a day overdue for water. */
+async function sendMissedSitterAlerts(userId: string, now: Date) {
+  const admin = createAdminClient();
+  const { data: homes } = await admin.from("home_members").select("home_id").eq("user_id", userId).in("role", ["owner", "household"]);
+  if (!homes?.length) return;
+  const iso = now.toISOString();
+  const { data: sitters } = await admin
+    .from("home_members")
+    .select("display_name, plant_scope")
+    .in("home_id", homes.map((h) => h.home_id))
+    .eq("role", "sitter")
+    .lte("starts_at", iso)
+    .gte("ends_at", iso);
+  for (const s of sitters ?? []) {
+    if (!s.plant_scope?.length) continue;
+    const { data: late } = await admin
+      .from("care_tasks")
+      .select("due_at, plant:plants(nickname)")
+      .in("plant_id", s.plant_scope)
+      .eq("type", "water")
+      .in("status", ["pending", "snoozed"])
+      .lt("due_at", new Date(now.getTime() - 86_400_000).toISOString());
+    for (const t of late ?? []) {
+      const nickname = (Array.isArray(t.plant) ? t.plant[0] : t.plant)?.nickname ?? "A plant";
+      const days = Math.floor((now.getTime() - new Date(t.due_at).getTime()) / 86_400_000);
+      await notifyUser(userId, {
+        html: `⚠️ <b>${escapeHtml(nickname)}</b> is ${days} day${days > 1 ? "s" : ""} overdue for water. <b>${escapeHtml(s.display_name)}</b> hasn't marked it yet. Maybe send them a message?`,
+        push: { title: `⚠️ ${nickname} is overdue for water`, body: `${s.display_name} hasn't marked it yet.`, url: "/circle", tag: `missed-${nickname}` },
+      });
     }
   }
-  return (await sendPushToUser(userId, msg.push)) > 0 || delivered;
 }
 
 /** Daily message per active rescue: today's steps (incl. unfinished ones) and photo days. */

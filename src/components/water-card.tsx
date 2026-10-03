@@ -15,6 +15,8 @@ export interface WaterCardProps {
   dueAt: string;
   photoUrl?: string | null;
   showPlantLink?: boolean;
+  /** Plant-sitter page: post answers here instead of the signed-in endpoint. */
+  answerEndpoint?: string;
 }
 
 const RESULT_TEXT: Record<WaterOutcome, string> = {
@@ -24,7 +26,17 @@ const RESULT_TEXT: Record<WaterOutcome, string> = {
   snooze: "OK, we'll remind you tomorrow.",
 };
 
-export function WaterCard({ taskId, plantId, nickname, title, detail, dueAt, photoUrl, showPlantLink = true }: WaterCardProps) {
+export function WaterCard({
+  taskId,
+  plantId,
+  nickname,
+  title,
+  detail,
+  dueAt,
+  photoUrl,
+  showPlantLink = true,
+  answerEndpoint,
+}: WaterCardProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -33,10 +45,10 @@ export function WaterCard({ taskId, plantId, nickname, title, detail, dueAt, pho
   async function answer(outcome: WaterOutcome) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/tasks/${taskId}/answer`, {
+    const res = await fetch(answerEndpoint ?? `/api/tasks/${taskId}/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ outcome }),
+      body: JSON.stringify(answerEndpoint ? { taskId, outcome } : { outcome }),
     });
     const json = await res.json().catch(() => ({}));
     setBusy(false);
