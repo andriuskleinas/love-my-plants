@@ -1,12 +1,19 @@
 import "server-only";
 import { chatForUser } from "@/lib/messenger/links.server";
 import { sendTelegramMessage, telegramConfigured } from "@/lib/messenger/telegram";
-import { checkinNudgeMessage, repotNudgeMessage, waterReminderMessage, waterRemindersIntro } from "@/lib/messenger/reminders";
+import {
+  checkinNudgeMessage,
+  repotNudgeMessage,
+  rescueDayMessage,
+  waterReminderMessage,
+  waterRemindersIntro,
+} from "@/lib/messenger/reminders";
 import { sendPushToUser } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isMemberActive } from "./access";
 import { CHECKIN_EVERY_DAYS, needsCheckin, REPOT_NOTICE_DAYS } from "./plan";
 import type { RepotDetails } from "./plan.server";
+import { planLength, rescueDay, stepsDueOn, type RescueStep } from "./rescue";
 import { endOfLocalDay, localTime, shouldSendDigest } from "./schedule";
 
 export interface DueWaterTask {
@@ -43,6 +50,7 @@ export async function runDailyDigest(now = new Date()) {
 
     const due = await dueWaterTasksFor(profile.id, endOfLocalDay(profile.timezone, now), now);
     if (due.length && (await sendWaterReminders(profile.id, due, local.date))) sent++;
+    await sendRescueUpdates(profile.id, profile.timezone, now);
     await sendCareNudges(profile.id, local.date, profile.last_checkin_nudge_on, now);
     await admin.from("profiles").update({ last_digest_on: local.date }).eq("id", profile.id);
   }
@@ -93,6 +101,34 @@ async function notifyUser(
     }
   }
   return (await sendPushToUser(userId, msg.push)) > 0 || delivered;
+}
+
+/** Daily message per active rescue: today's steps (incl. unfinished ones) and photo days. */
+async function sendRescueUpdates(userId: string, timeZone: string, now: Date) {
+  const plants = await visiblePlantsFor(userId, now);
+  if (!plants.length) return;
+  const { data: rescues } = await createAdminClient()
+    .from("rescue_plans")
+    .select("plant_id, started_at, steps, progress, extra")
+    .in("plant_id", plants.map((p) => p.id))
+    .is("ended_at", null);
+  for (const r of rescues ?? []) {
+    const steps = r.steps as RescueStep[];
+    const day = rescueDay(new Date(r.started_at), now, timeZone);
+    const length = planLength(steps);
+    const open = stepsDueOn(steps, r.progress as Record<string, string>, day).filter((s) => !s.done);
+    const checkinDays = ((r.extra as { checkinDays?: number[] }).checkinDays ?? []) as number[];
+    const nickname = plants.find((p) => p.id === r.plant_id)!.nickname;
+    await notifyUser(userId, {
+      html: rescueDayMessage(nickname, day, length, open.map((s) => s.step), checkinDays.includes(day) || day > length),
+      push: {
+        title: `🚨 ${nickname}: rescue day ${Math.min(day, length)}`,
+        body: open.length ? open.map((s) => s.step).join(" · ") : "Nothing to do today.",
+        url: `/plants/${r.plant_id}/rescue`,
+        tag: `rescue-${r.plant_id}`,
+      },
+    });
+  }
 }
 
 /**

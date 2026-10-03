@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeWaterAnswer, encodeWaterAnswer, waterAnswerSummary, waterReminderMessage } from "./reminders";
+import { decodeWaterAnswer, encodeWaterAnswer, rescueDayMessage, waterAnswerSummary, waterReminderMessage } from "./reminders";
 import { formatLinkCode, normalizeLinkCode } from "./link-code";
 import { escapeHtml } from "./types";
 
@@ -50,5 +50,20 @@ describe("connect codes", () => {
     expect(normalizeLinkCode("why are my leaves yellow")).toBeNull();
     expect(normalizeLinkCode("K7MP-3XQO")).toBeNull(); // letter O isn't used
     expect(normalizeLinkCode("/today")).toBeNull();
+  });
+});
+
+describe("rescue day message", () => {
+  it("lists today's steps and flags photo days", () => {
+    const html = rescueDayMessage("Monty", 3, 10, ["Check the soil", "Remove the soft leaf"], true);
+    expect(html).toContain("rescue day 3 of 10");
+    expect(html).toContain("1. Check the soil");
+    expect(html).toContain("photo check-in");
+  });
+
+  it("caps the day at the plan length and handles rest days", () => {
+    const html = rescueDayMessage("Monty", 12, 10, [], false);
+    expect(html).toContain("rescue day 10 of 10");
+    expect(html).toContain("Nothing to do today");
   });
 });

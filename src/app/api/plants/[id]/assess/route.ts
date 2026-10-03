@@ -3,6 +3,7 @@ import { z } from "zod";
 import { assessPlant, AssessmentError, ASSESS_MODEL, type AssessPhoto } from "@/lib/ai/assess";
 import { needsEmergency } from "@/lib/ai/schemas";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
+import { rescueDay, SYMPTOMS } from "@/lib/care/rescue";
 import { initialWaterDueAt, wateringIntervalDays, waterAmountMl, type Hemisphere } from "@/lib/care/watering";
 import {
   consumeAiQuota,
@@ -26,6 +27,10 @@ const bodySchema = z.object({
     )
     .min(1)
     .max(4),
+  /** Plant ER: start or follow up a rescue. */
+  emergency: z.boolean().optional(),
+  symptoms: z.array(z.enum(SYMPTOMS)).max(SYMPTOMS.length).optional(),
+  note: z.string().trim().max(300).optional(),
 });
 
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/[id]/assess">) {
@@ -52,8 +57,8 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
 
     await consumeAiQuota(userId);
 
-    const [{ data: profile }, { data: previous }] = await Promise.all([
-      supabase.from("profiles").select("hemisphere, latitude, location_name").eq("id", userId).maybeSingle(),
+    const [{ data: profile }, { data: previous }, { data: activeRescue }] = await Promise.all([
+      supabase.from("profiles").select("hemisphere, latitude, location_name, timezone").eq("id", userId).maybeSingle(),
       supabase
         .from("assessments")
         .select("created_at, health, scores, estimated_height_cm")
@@ -61,7 +66,15 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("rescue_plans")
+        .select("id, diagnosis, steps, progress, started_at")
+        .eq("plant_id", plantId)
+        .is("ended_at", null)
+        .maybeSingle(),
     ]);
+    // A check-in during a rescue is always an emergency follow-up.
+    const emergency = Boolean(parsed.data.emergency || activeRescue);
     const hemisphere = (profile?.hemisphere ?? "north") as Hemisphere;
     const latitude = profile?.latitude == null ? null : Number(profile.latitude);
 
@@ -76,7 +89,22 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     );
 
     const now = new Date();
+    const rescueSteps = (activeRescue?.steps ?? []) as { day: number; step: string }[];
+    const rescueProgress = (activeRescue?.progress ?? {}) as Record<string, string>;
     const assessment = await assessPlant(images, {
+      emergency,
+      symptoms: parsed.data.symptoms,
+      note: parsed.data.note || null,
+      rescue: activeRescue
+        ? {
+            day: rescueDay(new Date(activeRescue.started_at), now, profile?.timezone ?? "UTC"),
+            diagnosis: (activeRescue.diagnosis as { cause: string }[]).map((d) => d.cause),
+            doneSteps: rescueSteps.filter((_, i) => rescueProgress[i]).map((s) => s.step),
+            missedSteps: rescueSteps
+              .filter((s, i) => !rescueProgress[i] && s.day < rescueDay(new Date(activeRescue.started_at), now, profile?.timezone ?? "UTC"))
+              .map((s) => s.step),
+          }
+        : null,
       speciesHint: plant.species_name,
       potDiameterCm: Number(plant.pot_diameter_cm),
       potMaterial: plant.pot_material,
@@ -98,6 +126,9 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         : null,
     });
 
+    if (emergency && assessment.photoQuality.ok && !assessment.rescuePlan) {
+      throw new AssessmentError("emergency check without rescue plan", "We couldn't build a rescue plan. Please try again.");
+    }
     if (!assessment.photoQuality.ok) {
       return NextResponse.json({ retake: assessment.photoQuality.retakeHint ?? "Please take a clearer photo of the whole plant." });
     }
@@ -153,8 +184,32 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     if (saveError) throw saveError;
 
     const cover = photoRows.find((r) => r.kind === "whole" || r.kind === "checkin") ?? photoRows[0];
+    // Rescue plan: start one, or refresh the active one from today with the new advice.
+    let rescuePlanId: string | null = activeRescue?.id ?? null;
+    if (emergency && assessment.rescuePlan) {
+      const rp = assessment.rescuePlan;
+      const row = {
+        diagnosis: rp.diagnosis,
+        steps: rp.steps,
+        progress: {},
+        started_at: now.toISOString(),
+        extra: {
+          canBeSaved: rp.canBeSaved,
+          fallback: rp.fallback,
+          checkinDays: rp.checkinDays,
+          symptoms: parsed.data.symptoms ?? [],
+          note: parsed.data.note ?? null,
+        },
+      };
+      const { data: rescueRow, error: rescueError } = activeRescue
+        ? await admin.from("rescue_plans").update(row).eq("id", activeRescue.id).select("id").single()
+        : await admin.from("rescue_plans").insert({ plant_id: plantId, ...row }).select("id").single();
+      if (rescueError) throw rescueError;
+      rescuePlanId = rescueRow.id;
+    }
+
     const plantUpdate: Record<string, unknown> = {
-      status: needsEmergency(assessment.scores.health.value, previous?.health) ? "er" : "ok",
+      status: rescuePlanId || needsEmergency(assessment.scores.health.value, previous?.health) ? "er" : "ok",
     };
     // Newest whole-plant view becomes the cover (registration or weekly check-in).
     if (!plant.cover_photo_id || cover.kind === "whole" || cover.kind === "checkin") plantUpdate.cover_photo_id = cover.id;
@@ -200,6 +255,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     return NextResponse.json({
       assessmentId: saved.id,
       assessment,
+      rescuePlanId,
       previous: previous ? { health: previous.health, scores: previous.scores, date: previous.created_at } : null,
     });
   } catch (error) {

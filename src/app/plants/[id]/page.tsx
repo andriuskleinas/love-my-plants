@@ -7,6 +7,7 @@ import { Timelapse, type Frame } from "@/components/timelapse";
 import { WaterCard } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
 import { daysSince, needsCheckin } from "@/lib/care/plan";
+import { planLength, rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import type { Hemisphere } from "@/lib/care/watering";
@@ -77,6 +78,17 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
       .order("taken_at"),
     supabase.from("milestones").select("type, target_date, details").eq("plant_id", id),
   ]);
+  const { data: rescue } = await supabase
+    .from("rescue_plans")
+    .select("started_at, steps, progress")
+    .eq("plant_id", id)
+    .is("ended_at", null)
+    .maybeSingle();
+  const rescueSteps = (rescue?.steps ?? []) as RescueStep[];
+  const rescueToday = rescue ? rescueDay(new Date(rescue.started_at), new Date(), profile?.timezone ?? "UTC") : 0;
+  const rescueOpen = rescue
+    ? stepsDueOn(rescueSteps, rescue.progress as Record<string, string>, rescueToday).filter((s) => !s.done).length
+    : 0;
   let milestones = milestonesResult.data ?? [];
   // Plants checked before plans existed get theirs on first view.
   if (!milestones.length && latest) {
@@ -123,6 +135,29 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           {plant.nickname}
         </h1>
         {plant.species_name && <p className="italic text-muted">{plant.species_name}</p>}
+
+        {rescue ? (
+          <Link
+            href={`/plants/${plant.id}/rescue`}
+            className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
+          >
+            <span>
+              🚨 <b>Rescue day {Math.min(rescueToday, planLength(rescueSteps))} of {planLength(rescueSteps)}</b>
+              <span className="text-muted"> · {rescueOpen ? `${rescueOpen} step${rescueOpen > 1 ? "s" : ""} today` : "nothing to do today"}</span>
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+        ) : plant.status === "er" ? (
+          <Link
+            href={`/plants/${plant.id}/rescue`}
+            className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
+          >
+            <span>
+              🚨 <b>{plant.nickname} needs help.</b> <span className="text-muted">Start a rescue plan</span>
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+        ) : null}
 
         <Link
           href={`/plants/${plant.id}/checkin`}
@@ -235,6 +270,12 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
                 ))}
             </dl>
           </section>
+        )}
+
+        {!rescue && plant.status !== "er" && (
+          <Link href={`/plants/${plant.id}/rescue`} className="mt-10 block text-sm font-medium text-terracotta">
+            🚨 Something looks wrong? Start a Plant ER check →
+          </Link>
         )}
 
         <div className="mt-12">

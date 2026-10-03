@@ -30,6 +30,11 @@ export interface AssessContext {
   today: Date;
   previous?: { date: string; health: number; scores: Record<string, number>; heightCm: number | null } | null;
   emergency?: boolean;
+  /** What the owner ticked ("yellow leaves", …) and wrote ("forgot it for 2 weeks"). */
+  symptoms?: string[];
+  note?: string | null;
+  /** During an active rescue: where we are and what was done. */
+  rescue?: { day: number; diagnosis: string[]; doneSteps: string[]; missedSteps: string[] } | null;
 }
 
 const PHOTO_LABELS: Record<PhotoKind, string> = {
@@ -65,7 +70,13 @@ If a photo needed for a score is missing (e.g. no soil close-up), estimate from 
 - repotSignals: rootsVisible only if roots are visible at the drainage holes or soil surface; drainsTooFast only if there is visible evidence.
 - careProfile: typical care for this species indoors. baseWaterIntervalDays is the typical days between waterings in spring for a 15 cm plastic pot with drainage in an east window (the app adjusts for season, pot and light itself).
 - suggestedNickname: a short, friendly, slightly playful name based on the species.
-- rescuePlan: null unless the request says this is an emergency check. For emergencies give ranked likely causes and a day-by-day plan (7–14 days) with photo check-ins.
+- rescuePlan: null unless the request says this is an emergency check. For emergencies:
+  - diagnosis: 1–4 likely causes, most likely first, each with a one-sentence plain explanation of the evidence. Weigh the owner's symptoms and note, but trust the photos.
+  - steps: a day-by-day plan for 7–14 days (day 1 = today). Day 1 has the urgent fixes (e.g. "Unpot it, cut off black mushy roots with clean scissors, repot in fresh dry soil"). Later days are short checks. Each step is one concrete action with real-world amounts. Never water on a schedule in a rescue; say "only if the top 3 cm is dry".
+  - checkinDays: days to send a photo (e.g. [3, 7, 10]); include the last day.
+  - canBeSaved: false only if the plant is very likely beyond saving (e.g. stem rotted through). Be honest but gentle.
+  - fallback: when canBeSaved is false or the outlook is uncertain, how to keep the plant going anyway (e.g. "Take 2–3 cuttings from healthy stems and root them in water"). Otherwise null.
+  - If this is a follow-up during an active rescue, judge progress against the previous check, keep what is working, and give a fresh plan from today for the remaining recovery.
 - Pets: if the species is toxic, mention it in the care profile; be conservative with any pesticide advice and prefer non-chemical options first.`;
 
 export class AssessmentError extends Error {
@@ -93,6 +104,15 @@ function contextText(ctx: AssessContext): string {
   if (ctx.previous) {
     lines.push(
       `Previous check (${ctx.previous.date}): health ${ctx.previous.health}, scores ${JSON.stringify(ctx.previous.scores)}, height ${ctx.previous.heightCm ?? "unknown"} cm. Keep scores consistent with this unless the photos show real change.`,
+    );
+  }
+  if (ctx.symptoms?.length) lines.push(`Owner reports: ${ctx.symptoms.join(", ")}`);
+  if (ctx.note) lines.push(`Owner's note: "${ctx.note.replace(/"/g, "'")}"`);
+  if (ctx.rescue) {
+    lines.push(
+      `Active rescue, day ${ctx.rescue.day}. Earlier diagnosis: ${ctx.rescue.diagnosis.join("; ")}.`,
+      `Done so far: ${ctx.rescue.doneSteps.length ? ctx.rescue.doneSteps.join(" | ") : "nothing ticked"}.`,
+      ...(ctx.rescue.missedSteps.length ? [`Not done yet: ${ctx.rescue.missedSteps.join(" | ")}.`] : []),
     );
   }
   lines.push(ctx.emergency ? "This is an EMERGENCY check: include a rescuePlan." : "Routine check: rescuePlan must be null.");

@@ -6,6 +6,7 @@ import { StepList, type StepItem } from "@/components/step-list";
 import { WaterCard, type WaterCardProps } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
 import { needsCheckin } from "@/lib/care/plan";
+import { rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
@@ -45,14 +46,14 @@ export default async function Home() {
       .order("created_at"),
     supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle(),
   ]);
-  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} checkins={[]} />;
+  if (!plants?.length) return <Today plants={[]} water={[]} steps={[]} checkins={[]} rescues={[]} />;
 
   const ids = plants.map((p) => p.id);
   const coverPath = (p: (typeof plants)[number]) =>
     (Array.isArray(p.cover) ? p.cover[0] : p.cover)?.storage_path as string | undefined;
   const paths = plants.map(coverPath).filter((x): x is string => !!x);
 
-  const [{ data: assessments }, { data: tasks }, { data: signed }, { data: photos }] = await Promise.all([
+  const [{ data: assessments }, { data: tasks }, { data: signed }, { data: photos }, { data: rescuePlans }] = await Promise.all([
     supabase
       .from("assessments")
       .select("id, plant_id, health, raw, created_at")
@@ -69,6 +70,7 @@ export default async function Home() {
       ? supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)
       : Promise.resolve({ data: [] as { path: string | null; signedUrl: string }[] }),
     supabase.from("photos").select("plant_id, taken_at").in("plant_id", ids).order("taken_at", { ascending: false }),
+    supabase.from("rescue_plans").select("plant_id, started_at, steps, progress").in("plant_id", ids).is("ended_at", null),
   ]);
 
   // Both lists are sorted, so the first entry per plant is the latest check / soonest watering.
@@ -116,6 +118,18 @@ export default async function Home() {
     })
     .filter((g) => g.items.some((i) => !i.done));
 
+  const tz = profile?.timezone ?? "UTC";
+  const rescues = [
+    ...(rescuePlans ?? []).map((r) => {
+      const day = rescueDay(new Date(r.started_at), now, tz);
+      const open = stepsDueOn(r.steps as RescueStep[], r.progress as Record<string, string>, day).filter((s) => !s.done).length;
+      return { id: r.plant_id, nickname: byId.get(r.plant_id)!.nickname, text: `Rescue day ${day}${open ? ` · ${open} step${open > 1 ? "s" : ""} today` : ""}` };
+    }),
+    ...plants
+      .filter((p) => p.status === "er" && !rescuePlans?.some((r) => r.plant_id === p.id))
+      .map((p) => ({ id: p.id, nickname: p.nickname, text: "Needs help · start a rescue plan" })),
+  ];
+
   const lastPhoto = firstBy(photos);
   const checkins = plants
     .filter((p) => needsCheckin(lastPhoto.has(p.id) ? new Date(lastPhoto.get(p.id)!.taken_at) : null, now))
@@ -126,6 +140,7 @@ export default async function Home() {
       water={waterDue}
       steps={steps}
       checkins={checkins}
+      rescues={rescues}
       plants={plants.map((p) => ({
         id: p.id,
         nickname: p.nickname,
@@ -166,13 +181,15 @@ function Today({
   water,
   steps,
   checkins,
+  rescues,
 }: {
   plants: PlantRow[];
   water: WaterCardProps[];
   steps: StepGroup[];
   checkins: { id: string; nickname: string }[];
+  rescues: { id: string; nickname: string; text: string }[];
 }) {
-  const nothingToDo = water.length === 0 && steps.length === 0 && checkins.length === 0;
+  const nothingToDo = water.length === 0 && steps.length === 0 && checkins.length === 0 && rescues.length === 0;
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
       <header className="flex items-center justify-between">
@@ -196,6 +213,23 @@ function Today({
         <>
           {nothingToDo && (
             <p className="mt-6 rounded-2xl bg-leaf-soft p-4 text-center">🌿 Nothing to do today. Your plants are all set.</p>
+          )}
+
+          {rescues.length > 0 && (
+            <section className="mt-6 space-y-2" aria-label="Plant rescues">
+              {rescues.map((r) => (
+                <Link
+                  key={r.id}
+                  href={`/plants/${r.id}/rescue`}
+                  className="flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-4"
+                >
+                  <span>
+                    🚨 <b>{r.nickname}</b> <span className="text-sm text-muted">· {r.text}</span>
+                  </span>
+                  <span aria-hidden>→</span>
+                </Link>
+              ))}
+            </section>
           )}
 
           {water.length > 0 && (

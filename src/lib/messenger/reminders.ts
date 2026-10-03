@@ -55,6 +55,20 @@ export function waterAnswerSummary(nickname: string, outcome: WaterOutcome, next
   }
 }
 
+export function rescueDayMessage(
+  nickname: string,
+  day: number,
+  length: number,
+  steps: string[],
+  photoToday: boolean,
+): string {
+  const list = steps.length
+    ? steps.map((s, i) => `${i + 1}. ${escapeHtml(s)}`).join("\n")
+    : "Nothing to do today. Rest, light and patience. 🌿";
+  const photo = photoToday ? "\n\n📸 Today is a photo check-in: snap it in the app to see how it's responding." : "";
+  return `🚨 <b>${escapeHtml(nickname)}: rescue day ${Math.min(day, length)} of ${length}</b>\n${list}${photo}`;
+}
+
 export function repotNudgeMessage(nickname: string, potCm: number, reasons: string[]): string {
   const why = reasons.length ? `\nWhy: ${reasons.map(escapeHtml).join("; ")}.` : "";
   return (

@@ -83,8 +83,14 @@ export const assessmentSchema = z.object({
   }),
   rescuePlan: z
     .object({
-      diagnosis: z.array(z.object({ cause: z.string(), confidence })),
+      /** Likely causes, most likely first. */
+      diagnosis: z.array(z.object({ cause: z.string(), explanation: z.string(), confidence })).min(1).max(4),
       steps: z.array(rescueStepSchema).min(1).max(20),
+      /** Days (1 = today) on which to send a rescue check-in photo. */
+      checkinDays: z.array(z.number().int().min(1).max(30)).min(1).max(10),
+      canBeSaved: z.boolean(),
+      /** Plan B if it may not make it, e.g. take cuttings. */
+      fallback: z.string().nullable(),
     })
     .nullable(),
 });

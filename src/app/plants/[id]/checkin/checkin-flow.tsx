@@ -32,7 +32,7 @@ export function CheckinFlow({
   const [ghost, setGhost] = useState(0.35);
   const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [closeUp, setCloseUp] = useState<{ blob: Blob; url: string } | null>(null);
-  const [result, setResult] = useState<{ assessment: Assessment; previous: Previous } | null>(null);
+  const [result, setResult] = useState<{ assessment: Assessment; previous: Previous; rescuePlanId: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
 
@@ -127,7 +127,7 @@ export function CheckinFlow({
         setStep("camera");
         return;
       }
-      setResult({ assessment: json.assessment, previous: json.previous });
+      setResult({ assessment: json.assessment, previous: json.previous, rescuePlanId: json.rescuePlanId ?? null });
       setStep("result");
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.");
@@ -246,12 +246,12 @@ export function CheckinFlow({
           </div>
           <button
             onClick={() => {
-              router.push(`/plants/${plantId}`);
+              router.push(result.rescuePlanId ? `/plants/${plantId}/rescue` : `/plants/${plantId}`);
               router.refresh();
             }}
             className={`${primary} mt-8`}
           >
-            Done
+            {result.rescuePlanId ? "See the updated rescue plan" : "Done"}
           </button>
         </>
       )}
