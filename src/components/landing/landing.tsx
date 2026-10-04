@@ -165,7 +165,7 @@ export function Landing() {
         <footer className="flex flex-col gap-3 border-t border-ink/10 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
           <Logo size={28} withName />
           <p>
-            Made with <span role="img" aria-label="love">❤️</span> in Vilnius, Lithuania. Suitable for all the plants across
+            Made with <span role="img" aria-label="love">❤️</span> in Vilnius, Lithuania <span role="img" aria-label="European Union">🇪🇺</span>. Suitable for all the plants across
             the globe <span aria-hidden>🌍</span>
           </p>
         </footer>
