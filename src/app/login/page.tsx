@@ -5,24 +5,41 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+/** Plain-language reasons for the common sign-in failures. */
+function errorMessage(code: string | undefined, status: number | undefined): string {
+  if (code === "over_email_send_rate_limit") {
+    return "Too many sign-in emails were sent recently. Please wait an hour, or use the newest link already in your inbox.";
+  }
+  if (code === "over_request_rate_limit" || status === 429) return "Too many tries. Please wait a minute and try again.";
+  if (code === "email_address_invalid" || code === "validation_failed") return "That email address doesn't look right. Please check it.";
+  return "Something went wrong sending the email. Please try again in a moment.";
+}
+
 function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") ?? "/";
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(
-    params.get("error") ? "error" : "idle",
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [error, setError] = useState<string | null>(
+    params.get("error") ? "That sign-in link has expired or was already used. Enter your email for a new one." : null,
   );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setState("sending");
+    setError(null);
     const redirect = new URL("/auth/confirm", window.location.origin);
     redirect.searchParams.set("next", next);
-    const { error } = await createClient().auth.signInWithOtp({
+    const { error: otpError } = await createClient().auth.signInWithOtp({
       email,
       options: { emailRedirectTo: redirect.toString() },
     });
-    setState(error ? "error" : "sent");
+    if (otpError) {
+      setError(errorMessage(otpError.code, otpError.status));
+      setState("error");
+    } else {
+      setState("sent");
+    }
   }
 
   if (state === "sent") {
@@ -55,9 +72,9 @@ function LoginForm() {
         className="mt-1 w-full rounded-xl border border-border bg-surface px-4 py-3 text-base outline-none focus:border-leaf"
         placeholder="you@example.com"
       />
-      {state === "error" && (
+      {error && (
         <p role="alert" className="mt-2 text-sm text-bad">
-          That didn&apos;t work. Check the address and try again.
+          {error}
         </p>
       )}
       <button
