@@ -105,7 +105,6 @@ function LoginForm() {
       {next !== "/" && next !== "/reset-password" && !error && (
         <p className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">That page needs you to be signed in. Sign in below and you&apos;ll go straight there.</p>
       )}
-      {mode !== "forgot" && <GoogleButton next={next} onError={setError} />}
       <label htmlFor="email" className="mt-6 block text-sm font-medium">
         Email
       </label>
@@ -157,6 +156,7 @@ function LoginForm() {
       >
         {state === "busy" ? t.busy : t.button}
       </button>
+      {mode !== "forgot" && <GoogleButton next={next} onError={setError} />}
       <p className="mt-6 text-center text-sm text-muted">
         {mode === "signup" ? (
           <>
