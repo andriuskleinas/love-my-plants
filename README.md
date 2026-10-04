@@ -2,7 +2,7 @@
 
 Snap a photo of a house plant and get a health check, three simple care steps for today, watering reminders that learn, a repot plan, a growth time-lapse, rescue plans, vacation prep and a plant-sitter link.
 
-Installable web app (PWA): Next.js + Supabase + Claude vision. A Telegram "Plant Buddy" chat is planned.
+Installable web app (PWA): Next.js + Supabase + Claude vision. Telegram "Plant Buddy" chat for reminders and questions.
 
 ## Setup
 
@@ -39,7 +39,10 @@ Live at https://love-my-plants.vercel.app (Vercel, deploys from `main`).
 - **Telegram** delivers updates by webhook to `/api/telegram`, authenticated with
   `TELEGRAM_WEBHOOK_SECRET`. `npm run telegram` (local long polling) removes the webhook, so
   re-set it afterwards.
-- **Supabase Auth**: the production URL must be the Site URL and in Redirect URLs.
+- **Supabase Auth**: email + password. "Confirm email" is off (Authentication → Sign In / Providers →
+  Email), so sign-up sends no email. The production URL must be the Site URL and in Redirect URLs
+  (password-reset links land on `/auth/confirm`). Without custom SMTP, Supabase's built-in email only
+  reaches the project's team members, so password-reset emails only work for them.
 
 ## Layout
 

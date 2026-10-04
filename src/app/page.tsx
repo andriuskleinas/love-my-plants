@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { LogoMark } from "@/components/brand/marks";
 import { InstallCoach } from "@/components/install-coach";
 import { TelegramCard } from "@/components/telegram-card";
+import { Landing } from "@/components/landing/landing";
 import { HealthBadge } from "@/components/report-card";
 import { StepList, type StepItem } from "@/components/step-list";
 import { WaterCard, type WaterCardProps } from "@/components/water-card";
@@ -157,28 +159,6 @@ export default async function Home() {
   );
 }
 
-function Landing() {
-  return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-12">
-      <p className="text-5xl">🪴</p>
-      <h1 className="mt-6 text-3xl font-semibold tracking-tight">Snap a photo. Know what your plant needs.</h1>
-      <p className="mt-3 text-lg text-muted">
-        A health check for every plant, three simple steps for today, and a nudge when it&apos;s thirsty.
-      </p>
-      <ul className="mt-8 space-y-3 text-base">
-        <li className="flex gap-3"><span aria-hidden>📷</span><span>Photo health check: leaves, soil, light, pot and pests</span></li>
-        <li className="flex gap-3"><span aria-hidden>💧</span><span>Watering reminders that learn from your plant</span></li>
-        <li className="flex gap-3"><span aria-hidden>🪴</span><span>A repot plan as it grows, plus a growth time-lapse</span></li>
-        <li className="flex gap-3"><span aria-hidden>🚨</span><span>Rescue plans when something goes wrong</span></li>
-        <li className="flex gap-3"><span aria-hidden>✈️</span><span>Vacation prep and a simple link for your plant-sitter</span></li>
-      </ul>
-      <Link href="/login" className="mt-10 rounded-full bg-leaf py-3 text-center font-medium text-background">
-        Get started
-      </Link>
-    </main>
-  );
-}
-
 function Today({
   plants,
   water,
@@ -200,7 +180,10 @@ function Today({
   return (
     <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Today</h1>
+        <h1 className="flex items-center gap-3 text-2xl font-semibold">
+          <LogoMark size={34} title={null} />
+          Today
+        </h1>
         <nav className="flex gap-1 text-xl">
           <Link href="/vacation" aria-label="Going away" className="rounded-full p-2">
             ✈️

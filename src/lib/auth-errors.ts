@@ -9,12 +9,25 @@ export function signInErrorMessage(
   const message = error.message ?? "";
   if (!online || /fetch|network/i.test(message)) return MESSAGES.offline;
 
+  if (error.code === "invalid_credentials" || /invalid login credentials/i.test(message)) {
+    return "The email or password is wrong. Check both and try again, or reset your password.";
+  }
+  if (error.code === "user_already_exists" || error.code === "email_exists" || /already registered/i.test(message)) {
+    return "There's already an account with this email. Sign in instead.";
+  }
+  if (error.code === "weak_password" || /password should/i.test(message)) {
+    return "This password is too short or too easy to guess. Use at least 8 characters.";
+  }
+  // Supabase's built-in email only reaches the project's own team.
+  if (error.code === "email_address_not_authorized" || /email address not authorized/i.test(message)) {
+    return "Password reset emails can't be sent to this address yet. Ask the app owner to reset your password.";
+  }
   if (error.code === "over_email_send_rate_limit" || /email rate limit/i.test(message)) {
     const retryAt = new Date(now.getTime() + 60 * 60 * 1000);
-    return `Too many sign-in emails were sent. Try again after ${formatRetry(retryAt, now)}, or open the newest sign-in email you already have.`;
+    return `Too many emails were sent. Try again after ${formatRetry(retryAt, now)}, or use the newest email you already have.`;
   }
   const wait = /after (\d+) seconds?/i.exec(message)?.[1];
-  if (wait) return `A new link was requested too soon. Wait ${wait} seconds and try again.`;
+  if (wait) return `An email was requested too soon. Wait ${wait} seconds and try again.`;
   if (error.code === "over_request_rate_limit" || error.status === 429) {
     return "Too many sign-in attempts. Wait a few minutes and try again.";
   }
@@ -25,21 +38,21 @@ export function signInErrorMessage(
     return "New accounts can't be created right now. Ask the app owner to invite you.";
   }
   if ((error.status ?? 0) >= 500) return "Sign-in isn't working right now. Try again in a few minutes.";
-  return "The sign-in email wasn't sent. Try again in a few minutes.";
+  return "That didn't work. Try again in a few minutes.";
 }
 
-/** A sign-in link from an email didn't work (reason passed back by /auth/confirm). */
+/** A link from an email (password reset) didn't work (reason passed back by /auth/confirm). */
 export function linkErrorMessage(reason: string): string {
   switch (reason) {
     case "otp_expired":
-      return "This sign-in link has expired or was already used. Enter your email to get a new one.";
+      return "This link has expired or was already used. Use \"Forgot password?\" to get a new one.";
     case "access_denied":
-      return "This sign-in link no longer works. Enter your email to get a new one.";
+      return "This link no longer works. Use \"Forgot password?\" to get a new one.";
     case "missing":
-      return "This sign-in link is incomplete. Open it straight from the email, or request a new one.";
+      return "This link is incomplete. Open it straight from the email, or request a new one.";
     case "pkce":
-      return "This sign-in link was opened in a different browser. Open it in the browser where you requested it, or request a new one here.";
+      return "This link was opened in a different browser. Open it in the browser where you requested it, or request a new one here.";
     default:
-      return "This sign-in link didn't work. Enter your email to get a new one.";
+      return "This link didn't work. Use \"Forgot password?\" to get a new one.";
   }
 }

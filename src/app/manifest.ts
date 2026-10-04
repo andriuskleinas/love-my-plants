@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Snap a photo, get a plant health check and simple care steps.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f7f5ef",
-    theme_color: "#2f6b3f",
+    background_color: "#f6f1e4",
+    theme_color: "#f6f1e4",
     icons: [
       { src: "/icons/192", sizes: "192x192", type: "image/png" },
       { src: "/icons/512", sizes: "512x512", type: "image/png" },
