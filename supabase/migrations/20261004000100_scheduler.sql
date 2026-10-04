@@ -2,7 +2,7 @@
 -- The shared secret is generated here, kept in Vault, and never leaves the database except in
 -- that request; the app verifies it by calling verify_cron_secret() with the service role.
 create extension if not exists pg_cron;
-create extension if not exists pg_net;
+create extension if not exists pg_net with schema extensions;
 
 do $$
 begin
