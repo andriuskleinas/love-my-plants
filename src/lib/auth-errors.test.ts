@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linkErrorMessage, signInErrorMessage } from "./auth-errors";
+import { linkErrorMessage, oauthErrorMessage, signInErrorMessage } from "./auth-errors";
 import { MESSAGES } from "./errors";
 
 const now = new Date("2026-10-04T11:50:00Z");
@@ -33,5 +33,11 @@ describe("sign-in errors", () => {
     expect(linkErrorMessage("otp_expired")).toBe('This link has expired or was already used. Use "Forgot password?" to get a new one.');
     expect(linkErrorMessage("pkce")).toMatch(/different browser/);
     expect(linkErrorMessage("something")).toMatch(/didn't work/);
+  });
+
+  it("explains Google sign-in problems", () => {
+    expect(oauthErrorMessage("access_denied")).toBe("Google sign-in was cancelled. Try again, or use your email and password.");
+    expect(oauthErrorMessage("pkce")).toMatch(/different browser/);
+    expect(oauthErrorMessage("server_error")).toMatch(/^Google sign-in didn't work\./);
   });
 });

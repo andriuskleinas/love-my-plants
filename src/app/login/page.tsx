@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Logo } from "@/components/brand/logo";
-import { linkErrorMessage, signInErrorMessage } from "@/lib/auth-errors";
+import { BackIcon } from "@/components/icons";
+import { linkErrorMessage, oauthErrorMessage, signInErrorMessage } from "@/lib/auth-errors";
 import { safeNext } from "@/lib/safe-next";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton } from "./google-button";
 
 type Mode = "signin" | "signup" | "forgot";
 
@@ -26,7 +28,10 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
-  const [error, setError] = useState<string | null>(params.get("error") ? linkErrorMessage(params.get("error")!) : null);
+  const linkError = params.get("error");
+  const [error, setError] = useState<string | null>(
+    linkError ? (params.get("via") === "google" ? oauthErrorMessage(linkError) : linkErrorMessage(linkError)) : null,
+  );
 
   function switchTo(m: Mode) {
     setMode(m);
@@ -100,6 +105,7 @@ function LoginForm() {
       {next !== "/" && next !== "/reset-password" && !error && (
         <p className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">That page needs you to be signed in. Sign in below and you&apos;ll go straight there.</p>
       )}
+      {mode !== "forgot" && <GoogleButton next={next} onError={setError} />}
       <label htmlFor="email" className="mt-6 block text-sm font-medium">
         Email
       </label>
@@ -179,6 +185,13 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-12">
+      {/* Installed on a phone there's no browser back button, so the way out is always on the page. */}
+      <Link
+        href="/"
+        className="fixed left-2 top-[max(0.5rem,env(safe-area-inset-top))] flex items-center gap-1 rounded-full py-2 pl-2 pr-3 text-sm text-muted hover:bg-border/60 hover:text-foreground"
+      >
+        <BackIcon size={18} /> Home
+      </Link>
       <Link href="/" className="mb-10 self-center" aria-label="Love My Plants home">
         <Logo size={88} stacked />
       </Link>

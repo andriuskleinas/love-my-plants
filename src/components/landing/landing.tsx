@@ -151,7 +151,10 @@ export function Landing() {
 
           <section className="paper mb-12 flex flex-col items-center rounded-[36px] bg-terracotta px-6 py-12 text-center md:py-16">
             <BeatingHeart className="mb-4 size-24 sm:size-28" />
-            <h2 className="max-w-xl font-display text-4xl font-bold tracking-tight sm:text-5xl">Your plants will thank you.</h2>
+            {/* One line at every width: the size follows the screen, capped at 3rem (the line is ~12.1em wide). */}
+            <h2 className="whitespace-nowrap font-display text-[length:clamp(1.125rem,calc((100vw_-_6rem)/12.6),3rem)] font-bold tracking-tight">
+              Your plants will thank you.
+            </h2>
             <p className="mt-3 max-w-md text-ink/75">Start with one plant. It takes about a minute.</p>
             <Link href={SIGN_UP} className="mt-8 rounded-full bg-ink px-7 py-3.5 font-medium text-cream hover:bg-ink/85">
               Create free account

@@ -56,3 +56,15 @@ export function linkErrorMessage(reason: string): string {
       return "This link didn't work. Use \"Forgot password?\" to get a new one.";
   }
 }
+
+/** "Continue with Google" didn't finish (reason passed back by /auth/confirm). */
+export function oauthErrorMessage(reason: string): string {
+  switch (reason) {
+    case "access_denied":
+      return "Google sign-in was cancelled. Try again, or use your email and password.";
+    case "pkce":
+      return "Google sign-in was finished in a different browser. Start it again here.";
+    default:
+      return "Google sign-in didn't work. Try again, or use your email and password.";
+  }
+}
