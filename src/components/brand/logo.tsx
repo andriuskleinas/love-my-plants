@@ -5,7 +5,7 @@ const NAME = "I Love My Plants";
 
 /**
  * The 4-square mark, optionally with the name: beside it with a turning sun (header, footer),
- * or centred underneath (sign-in pages).
+ * or centred underneath, also with the sun (sign-in pages).
  */
 export function Logo({
   size = 40,
@@ -23,7 +23,10 @@ export function Logo({
     return (
       <span className="inline-flex flex-col items-center gap-3">
         <LogoMark size={size} title={null} />
-        <span className="font-display text-2xl font-bold tracking-tight">{NAME}</span>
+        <span className="inline-flex items-center gap-2">
+          <span className="font-display text-2xl font-bold tracking-tight">{NAME}</span>
+          <Sun size={30} />
+        </span>
       </span>
     );
   }

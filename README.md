@@ -41,8 +41,8 @@ Live at https://love-my-plants.vercel.app (Vercel, deploys from `main`).
   re-set it afterwards.
 - **Supabase Auth**: email + password. "Confirm email" is off (Authentication → Sign In / Providers →
   Email), so sign-up sends no email. The production URL must be the Site URL and in Redirect URLs
-  (password-reset links land on `/auth/confirm`). Without custom SMTP, Supabase's built-in email only
-  reaches the project's team members, so password-reset emails only work for them.
+  (password-reset links land on `/auth/confirm`). Password-reset emails use Supabase's built-in
+  sender, which is limited to about 2 emails per hour (tested 2026-10-04: it delivers to any address).
 
 ## Layout
 
