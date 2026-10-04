@@ -34,6 +34,15 @@ prepare your plants for a holiday, and give a friend a no-account plant-sitting 
 It's a real, deployed product, built end to end: product design, hand-drawn illustration style,
 database security, AI integration, messaging and scheduling.
 
+## The app
+
+<img src="docs/screenshots/app-screens-1.png" alt="App screens: Today to-do list, a plant page with health score, and the AI report card" width="100%">
+<img src="docs/screenshots/app-screens-2.png" alt="App screens: plant list with health scores, going-away checklist with plant-sitter invite, and shopping list" width="100%">
+
+<sub>Real screens from the live app with my own plants. On a desktop the same pages get a sidebar.</sub>
+
+### Landing page
+
 <p align="center">
   <img src="docs/screenshots/landing-desktop.png" alt="Landing page on desktop" width="72%">
   &nbsp;
