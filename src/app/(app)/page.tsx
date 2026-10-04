@@ -3,7 +3,7 @@ import { LogoMark } from "@/components/brand/marks";
 import { InstallCoach } from "@/components/install-coach";
 import { TelegramCard } from "@/components/telegram-card";
 import { Landing } from "@/components/landing/landing";
-import { HealthBadge } from "@/components/report-card";
+import { PlantList, type PlantRow } from "@/components/plant-list";
 import { StepList, type StepItem } from "@/components/step-list";
 import { WaterCard, type WaterCardProps } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
@@ -11,7 +11,6 @@ import { needsCheckin } from "@/lib/care/plan";
 import { rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { loadTrip, type TripView } from "@/lib/care/vacation.server";
-import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,16 +19,6 @@ const isConfigured = () =>
 
 /** Steps from checks older than this no longer show on Today. */
 const STEP_MAX_AGE_DAYS = 14;
-
-type PlantRow = {
-  id: string;
-  nickname: string;
-  species_name: string | null;
-  status: string;
-  photoUrl: string | null;
-  health: number | null;
-  waterDue: string | null;
-};
 
 type StepGroup = { plantId: string; nickname: string; assessmentId: string; items: StepItem[] };
 
@@ -178,26 +167,14 @@ function Today({
   const tripEnd = trip ? new Date(trip.endsAt).toLocaleDateString(undefined, { day: "numeric", month: "long" }) : "";
   const nothingToDo = water.length === 0 && steps.length === 0 && checkins.length === 0 && rescues.length === 0;
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-28 pt-8">
-      <header className="flex items-center justify-between">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 pt-8">
+      <header>
         <h1 className="flex items-center gap-3 text-2xl font-semibold">
-          <LogoMark size={34} title={null} />
+          <span className="lg:hidden">
+            <LogoMark size={34} title={null} />
+          </span>
           Today
         </h1>
-        <nav className="flex gap-1 text-xl">
-          <Link href="/vacation" aria-label="Going away" className="rounded-full p-2">
-            ✈️
-          </Link>
-          <Link href="/shopping" aria-label="Shopping list" className="rounded-full p-2">
-            🛒
-          </Link>
-          <Link href="/circle" aria-label="Care Circle" className="rounded-full p-2">
-            👥
-          </Link>
-          <Link href="/settings" aria-label="Settings" className="rounded-full p-2">
-            ⚙️
-          </Link>
-        </nav>
       </header>
       <div className="mt-4 space-y-3">
         {trip && (
@@ -226,6 +203,9 @@ function Today({
           <p className="text-5xl">🌱</p>
           <h2 className="mt-4 text-xl font-semibold">Add your first plant</h2>
           <p className="mt-2 text-muted">Take a photo and we&apos;ll tell you how it&apos;s doing.</p>
+          <Link href="/plants/new" className="mt-6 inline-block rounded-full bg-leaf px-6 py-3 font-medium text-background">
+            Add a plant
+          </Link>
         </section>
       ) : (
         <>
@@ -284,45 +264,10 @@ function Today({
           ))}
 
           <h2 className="mt-10 text-lg font-semibold">My plants</h2>
-          <ul className="mt-3 space-y-3">
-            {plants.map((p) => {
-              const due = p.waterDue ? new Date(p.waterDue) : null;
-              return (
-                <li key={p.id}>
-                  <Link
-                    href={`/plants/${p.id}`}
-                    className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-3"
-                  >
-                    {p.photoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                      <img src={p.photoUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-                    ) : (
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-2xl">🪴</div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">
-                        {p.status === "er" && "🚨 "}
-                        {p.nickname}
-                      </p>
-                      {p.species_name && <p className="truncate text-sm italic text-muted">{p.species_name}</p>}
-                      {due && <p className="mt-0.5 text-sm text-muted">💧 Water {dueLabel(due)}</p>}
-                    </div>
-                    {p.health != null && <HealthBadge value={p.health} />}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <PlantList plants={plants} />
         </>
       )}
 
-      <Link
-        href="/plants/new"
-        aria-label="Add a plant"
-        className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-leaf text-3xl text-background shadow-lg"
-      >
-        📷
-      </Link>
     </main>
   );
 }

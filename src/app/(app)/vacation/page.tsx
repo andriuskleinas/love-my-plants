@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
 import { PREP_WHEN_LABELS, type PrepWhen } from "@/lib/care/vacation";
 import { loadTrip } from "@/lib/care/vacation.server";
 import { createClient } from "@/lib/supabase/server";
@@ -23,11 +24,8 @@ export default async function VacationPage() {
   const trip = await loadTrip(supabase, userId);
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-16 pt-6">
-      <Link href="/" className="text-sm text-muted">
-        ← Today
-      </Link>
-      <h1 className="mt-4 text-2xl font-semibold">✈️ Going away</h1>
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+      <PageHeader title="Going away" back={{ href: "/more", label: "More" }} />
 
       {!trip ? (
         <>

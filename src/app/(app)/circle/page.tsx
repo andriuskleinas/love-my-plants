@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
 import { isMemberActive } from "@/lib/care/access";
 import { getManagedHomeId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -49,11 +50,8 @@ export default async function CirclePage({ searchParams }: PageProps<"/circle">)
   }));
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-16 pt-6">
-      <Link href="/" className="text-sm text-muted">
-        ← Today
-      </Link>
-      <h1 className="mt-4 text-2xl font-semibold">Care Circle</h1>
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+      <PageHeader title="Care Circle" back={{ href: "/more", label: "More" }} />
       <p className="mt-1 text-muted">Everyone who helps look after your plants. Whoever waters taps Done, and the others don&apos;t get that reminder.</p>
 
       {nameFromEmail && (

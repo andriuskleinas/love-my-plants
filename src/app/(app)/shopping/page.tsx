@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
 import { loadShopping, shoppingHomeFor } from "@/lib/care/shopping.server";
 import { createClient } from "@/lib/supabase/server";
 import { AddItem, AddSuggestions, ItemList } from "./shopping-client";
@@ -16,11 +16,8 @@ export default async function ShoppingPage() {
   const { items, suggestions } = homeId ? await loadShopping(homeId) : { items: [], suggestions: [] };
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-16 pt-6">
-      <Link href="/" className="text-sm text-muted">
-        ← Today
-      </Link>
-      <h1 className="mt-4 text-2xl font-semibold">🛒 Shopping list</h1>
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+      <PageHeader title="Shopping list" />
       <p className="mt-1 text-muted">
         Also in Telegram: send <b>/list</b> in the shop, or a photo of a product to check it suits your plants.
       </p>

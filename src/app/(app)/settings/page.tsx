@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
 import { NotificationsCard } from "@/components/notifications-card";
 import { TelegramCard } from "@/components/telegram-card";
 import { createClient } from "@/lib/supabase/server";
@@ -21,11 +21,8 @@ export default async function SettingsPage() {
     .maybeSingle();
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-16 pt-6">
-      <Link href="/" className="text-sm text-muted">
-        ← Today
-      </Link>
-      <h1 className="mt-4 text-2xl font-semibold">Settings</h1>
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+      <PageHeader title="Settings" back={{ href: "/more", label: "More" }} />
 
       <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-muted">Reminders</h2>
       <div className="mt-2 space-y-3">

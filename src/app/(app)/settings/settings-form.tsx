@@ -1,10 +1,9 @@
 "use client";
 
 import { callApi } from "@/lib/api-client";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LocationCard } from "./location-card";
-import { createClient } from "@/lib/supabase/client";
+import { SignOutButton } from "@/components/sign-out-button";
 
 const HOURS = Array.from({ length: 17 }, (_, i) => `${String(i + 6).padStart(2, "0")}:00`); // 06:00–22:00
 
@@ -16,7 +15,6 @@ export function SettingsForm(props: {
   timezone: string;
   email: string | null;
 }) {
-  const router = useRouter();
   const [digestTime, setDigestTime] = useState(props.digestTime);
   const [saved, setSaved] = useState<string | null>(null);
   const [name, setName] = useState(props.displayName);
@@ -25,12 +23,6 @@ export function SettingsForm(props: {
     setSaved(null);
     const res = await callApi("/api/profile", { method: "PATCH", json: update });
     setSaved(res.ok ? "Saved" : res.error);
-  }
-
-  async function signOut() {
-    await createClient().auth.signOut();
-    router.push("/");
-    router.refresh();
   }
 
   const times = HOURS.includes(digestTime) ? HOURS : [digestTime, ...HOURS];
@@ -94,9 +86,7 @@ export function SettingsForm(props: {
 
       <div className="border-t border-border pt-6 text-sm">
         {props.email && <p className="text-muted">Signed in as {props.email}</p>}
-        <button onClick={signOut} className="mt-2 font-medium text-bad">
-          Sign out
-        </button>
+        <SignOutButton className="mt-2 font-medium text-bad" />
       </div>
     </div>
   );

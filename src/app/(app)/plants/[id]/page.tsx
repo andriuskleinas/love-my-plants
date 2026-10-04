@@ -122,7 +122,7 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           <div className="flex aspect-[4/3] w-full items-center justify-center bg-leaf-soft text-6xl">🪴</div>
         )}
         <Link
-          href="/"
+          href="/plants"
           className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] rounded-full bg-background/90 px-3 py-1.5 text-sm"
         >
           ← Plants
