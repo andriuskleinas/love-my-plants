@@ -27,17 +27,8 @@ const RESULT_TEXT: Record<WaterOutcome, string> = {
   snooze: "OK, we'll remind you tomorrow.",
 };
 
-export function WaterCard({
-  taskId,
-  plantId,
-  nickname,
-  title,
-  detail,
-  dueAt,
-  photoUrl,
-  showPlantLink = true,
-  answerEndpoint,
-}: WaterCardProps) {
+/** Sends a watering answer and keeps the result to show; Today and the plant page share it. */
+export function useWaterAnswer(taskId: string, answerEndpoint?: string) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -60,6 +51,22 @@ export function WaterCard({
     setResult(RESULT_TEXT[outcome] + next);
     setTimeout(() => router.refresh(), 2500);
   }
+
+  return { answer, busy, result, error };
+}
+
+export function WaterCard({
+  taskId,
+  plantId,
+  nickname,
+  title,
+  detail,
+  dueAt,
+  photoUrl,
+  showPlantLink = true,
+  answerEndpoint,
+}: WaterCardProps) {
+  const { answer, busy, result, error } = useWaterAnswer(taskId, answerEndpoint);
 
   const due = dueLabel(new Date(dueAt));
   const overdue = due.endsWith("overdue");
