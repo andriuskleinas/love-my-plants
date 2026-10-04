@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ReportCard } from "@/components/report-card";
 import { SCORE_KEYS, SCORE_LABELS, type Assessment } from "@/lib/ai/schemas";
+import { callApi } from "@/lib/api-client";
 import { compressImage } from "@/lib/image/compress";
+import { readPhoto, uploadPlantPhoto } from "@/lib/image/upload";
 import { createClient } from "@/lib/supabase/client";
 
 type Step = "camera" | "review" | "checking" | "result";
@@ -29,6 +31,7 @@ export function CheckinFlow({
   const streamRef = useRef<MediaStream | null>(null);
   const [step, setStep] = useState<Step>("camera");
   const [cameraOk, setCameraOk] = useState<boolean | null>(null);
+  const [cameraProblem, setCameraProblem] = useState<string | null>(null);
   const [ghost, setGhost] = useState(0.35);
   const [photo, setPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [closeUp, setCloseUp] = useState<{ blob: Blob; url: string } | null>(null);
@@ -42,7 +45,14 @@ export function CheckinFlow({
   }, []);
 
   const startCamera = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia) return setCameraOk(false);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraProblem(
+        window.isSecureContext
+          ? "This browser doesn't support the live camera."
+          : "The live camera only works on a secure (https) address, so it's off here.",
+      );
+      return setCameraOk(false);
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1920 } },
@@ -54,7 +64,17 @@ export function CheckinFlow({
         await videoRef.current.play();
       }
       setCameraOk(true);
-    } catch {
+    } catch (e) {
+      const name = (e as DOMException).name;
+      setCameraProblem(
+        name === "NotAllowedError"
+          ? "Camera access is blocked for this site. Allow the camera in your browser's site settings, then reload."
+          : name === "NotFoundError" || name === "OverconstrainedError"
+            ? "No camera was found on this device."
+            : name === "NotReadableError"
+              ? "The camera is being used by another app. Close it and reload this page."
+              : "The live camera couldn't start.",
+      );
       setCameraOk(false);
     }
   }, []);
@@ -89,7 +109,13 @@ export function CheckinFlow({
 
   async function fromFile(file: File | undefined, target: "photo" | "closeUp") {
     if (!file) return;
-    const blob = await compressImage(file);
+    let blob: Blob;
+    try {
+      blob = await readPhoto(file);
+    } catch (e) {
+      return setError((e as Error).message);
+    }
+    setError(null);
     const value = { blob, url: URL.createObjectURL(blob) };
     if (target === "photo") {
       setPhoto(value);
@@ -109,18 +135,18 @@ export function CheckinFlow({
       const uploaded = await Promise.all(
         shots.map(async (s) => {
           const path = `${homeId}/${plantId}/${crypto.randomUUID()}.jpg`;
-          const { error: upErr } = await supabase.storage.from("plant-photos").upload(path, s.blob, { contentType: "image/jpeg" });
-          if (upErr) throw new Error("Uploading the photo failed. Check your connection and try again.");
+          await uploadPlantPhoto(supabase, path, s.blob);
           return { path, kind: s.kind };
         }),
       );
-      const res = await fetch(`/api/plants/${plantId}/assess`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: uploaded }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      const checked = await callApi<{
+        retake?: string;
+        assessment: Assessment;
+        previous: Previous;
+        rescuePlanId?: string | null;
+      }>(`/api/plants/${plantId}/assess`, { method: "POST", json: { photos: uploaded } });
+      if (!checked.ok) throw new Error(checked.error);
+      const json = checked.data;
       if (json.retake) {
         setHint(json.retake);
         setPhoto(null);
@@ -130,7 +156,7 @@ export function CheckinFlow({
       setResult({ assessment: json.assessment, previous: json.previous, rescuePlanId: json.rescuePlanId ?? null });
       setStep("result");
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.");
+      setError((e as Error).message);
       setStep("review");
     }
   }
@@ -167,7 +193,7 @@ export function CheckinFlow({
             )}
             {cameraOk === false && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-sm text-white">
-                <p>The live camera isn&apos;t available here.</p>
+                <p>{cameraProblem ?? "The live camera isn't available here."}</p>
                 <p className="text-white/70">Use the button below to take or choose a photo.</p>
               </div>
             )}

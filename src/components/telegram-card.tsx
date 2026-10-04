@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
@@ -40,10 +41,10 @@ export function TelegramCard({
   async function connect() {
     setBusy(true);
     setMessage(null);
-    const res = await fetch(endpoint, { method: "POST" });
-    const json = await res.json().catch(() => ({}));
+    const res = await callApi<{ url: string; code: string; bot: string }>(endpoint, { method: "POST" });
     setBusy(false);
-    if (!res.ok) return setMessage(json.error ?? "Couldn't start. Please try again.");
+    if (!res.ok) return setMessage(`Telegram couldn't be connected. ${res.error}`);
+    const json = res.data;
 
     setLink(json);
     // On a computer, Telegram usually lives on the phone: show a QR code to scan.
@@ -64,23 +65,24 @@ export function TelegramCard({
       } else if (tries > 100) {
         clearInterval(polling.current!);
         setState("off");
+        setMessage("The connect code expired after 15 minutes without being used. Tap Connect Telegram to get a new one.");
       }
     }, 3000);
   }
 
   async function disconnect() {
     setBusy(true);
-    await fetch("/api/messenger/link", { method: "DELETE" });
+    const res = await callApi("/api/messenger/link", { method: "DELETE" });
+    setBusy(false);
+    if (!res.ok) return setMessage(`Telegram is still connected. ${res.error}`);
     setState("off");
     setMessage(null);
-    setBusy(false);
   }
 
   async function sendTest() {
     setBusy(true);
-    const res = await fetch("/api/messenger/test", { method: "POST" });
-    const json = await res.json().catch(() => ({}));
-    setMessage(res.ok ? "Sent! Check Telegram." : (json.error ?? "Couldn't send."));
+    const res = await callApi("/api/messenger/test", { method: "POST" });
+    setMessage(res.ok ? "Sent! Check Telegram." : `The test wasn't sent. ${res.error}`);
     setBusy(false);
   }
 

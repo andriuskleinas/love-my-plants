@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/circle/
       .select("role")
       .maybeSingle();
     if (error) throw error;
-    if (!data) throw new HttpError(404, "Can't make a new link for this person.");
+    if (!data) throw new HttpError(404, "New links are only for plant-sitters and for invites nobody has accepted yet. This person already joined with their own account.");
     const origin = new URL(request.url).origin;
     return NextResponse.json({ url: `${origin}/${data.role === "sitter" ? "sit" : "join"}/${token}` });
   } catch (error) {
@@ -34,7 +34,7 @@ export async function PATCH(_request: NextRequest, ctx: RouteContext<"/api/circl
     await requireUserId(supabase);
     const now = new Date().toISOString();
     const { data: m } = await supabase.from("home_members").select("starts_at").eq("id", memberId).eq("role", "sitter").maybeSingle();
-    if (!m) throw new HttpError(404, "Sitter not found.");
+    if (!m) throw new HttpError(404, "This plant-sitter isn't in your Care Circle anymore. Refresh the page.");
     // Ending before it started: shrink to a zero-length window that's already over.
     const startsAt =
       m.starts_at && new Date(m.starts_at).getTime() > Date.now() ? new Date(Date.now() - 60_000).toISOString() : m.starts_at;
@@ -53,7 +53,7 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/circ
     await requireUserId(supabase);
     const { data, error } = await supabase.from("home_members").delete().eq("id", memberId).select("id");
     if (error) throw error;
-    if (!data.length) throw new HttpError(403, "You can't remove this person.");
+    if (!data.length) throw new HttpError(403, "You can't remove this person: only the owner and household members can remove people, and the owner can't be removed.");
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

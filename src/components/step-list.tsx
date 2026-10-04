@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useState } from "react";
 
 export interface StepItem {
@@ -22,14 +23,10 @@ export function StepList({ plantId, assessmentId, items }: { plantId: string; as
     setDone(optimistic);
     setError(null);
 
-    const res = await fetch(`/api/plants/${plantId}/steps`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assessmentId, index, done: next }),
-    });
+    const res = await callApi(`/api/plants/${plantId}/steps`, { method: "POST", json: { assessmentId, index, done: next } });
     if (!res.ok) {
       setDone(done); // roll back
-      setError("Couldn't save that tick. Please try again.");
+      setError(`That tick wasn't saved. ${res.error}`);
     }
   }
 

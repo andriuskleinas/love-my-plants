@@ -2,6 +2,7 @@ import "server-only";
 import { AssessmentError } from "@/lib/ai/assess";
 import { askBuddy } from "@/lib/ai/buddy";
 import { addShoppingItems, loadShopping, setItemStatus, shoppingHomeFor } from "@/lib/care/shopping.server";
+import { formatRetry } from "@/lib/errors";
 import { consumeChatQuota, HttpError } from "@/lib/plants/server";
 import { decodeShopping, formatBuddyReply, formatShoppingList } from "./buddy-format";
 import { dueWaterTasksFor, userCanAccessPlant, visiblePlantsFor } from "@/lib/care/digest.server";
@@ -55,7 +56,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
   if (!msg?.text) return;
   const chatId = String(msg.chat.id);
   if (msg.chat.type !== "private") {
-    await sendTelegramMessage(chatId, "Please message me in a private chat.");
+    await sendTelegramMessage(chatId, "I only work in private chats, so I can't help in groups. Open a private chat with me instead.");
     return;
   }
 
@@ -133,7 +134,7 @@ async function handleToday(chatId: string) {
   if (owner.memberId) {
     const sitter = await sitterForMember(owner.memberId, now);
     if (!sitter || sitter.status !== "active") {
-      await sendTelegramMessage(chatId, "Your plant-sitting dates aren't active right now. Thank you for helping! 🌿");
+      await sendTelegramMessage(chatId, "Your plant-sitting dates haven't started yet or have already ended, so there's nothing to water. Thank you for helping! 🌿");
       return;
     }
     due = await dueWaterTasksForSitter(sitter, endOfLocalDay((await ownerSettings(sitter.ownerId)).timeZone, now));
@@ -163,7 +164,7 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
 
   const owner = await ownerForChat("telegram", chatId);
   if (!owner) {
-    await answerTelegramCallback(cb.id, "This chat isn't connected anymore.");
+    await answerTelegramCallback(cb.id, "This chat isn't linked to an account anymore. Reconnect in the app: Settings → Connect Telegram.");
     return;
   }
   if (owner.memberId) return handleSitterCallback(cb, chatId, owner.memberId, answer);
@@ -177,8 +178,8 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
     .eq("id", answer.taskId)
     .maybeSingle();
   if (!task || !(await userCanAccessPlant(userId, task.plant_id))) {
-    await answerTelegramCallback(cb.id, "This reminder isn't available anymore.");
-    await editTelegramMessage(chatId, cb.message.message_id, "This reminder isn't available anymore.");
+    await answerTelegramCallback(cb.id, "This reminder doesn't exist anymore. The plant may have been deleted, or the reminder was changed in the app.");
+    await editTelegramMessage(chatId, cb.message.message_id, "This reminder doesn't exist anymore. The plant may have been deleted, or the reminder was changed in the app.");
     return;
   }
   const nickname = (Array.isArray(task.plant) ? task.plant[0] : task.plant)?.nickname ?? "Your plant";
@@ -214,7 +215,7 @@ async function handleSitterCallback(
   const now = new Date();
   const sitter = await sitterForMember(memberId, now);
   if (!sitter || sitter.status !== "active") {
-    await answerTelegramCallback(cb.id, "Your plant-sitting dates aren't active right now.");
+    await answerTelegramCallback(cb.id, "Plant-sitting hasn't started yet or has already ended, so this can't be marked. Check your dates with the plant owner.");
     return;
   }
   // Already handled (by the owner or an earlier tap)?
@@ -234,7 +235,7 @@ async function handleSitterCallback(
       waterAnswerSummary(result.nickname, answer.outcome, dueLabel(new Date(result.nextDueAt), now)),
     );
   } catch (error) {
-    await answerTelegramCallback(cb.id, (error as Error).message.slice(0, 180));
+    await answerTelegramCallback(cb.id, `Not saved: ${(error as Error).message}`.slice(0, 190));
   }
 }
 
@@ -270,12 +271,19 @@ async function handleChat(chatId: string, text: string, photo?: TelegramPhotoSiz
     }
     await sendTelegramMessage(chatId, formatBuddyReply(reply, added));
   } catch (error) {
-    const message =
-      error instanceof AssessmentError || error instanceof HttpError
-        ? error instanceof AssessmentError
-          ? error.userMessage
-          : error.message
-        : "Sorry, something went wrong. Please try again.";
+    let message: string;
+    if (error instanceof AssessmentError) {
+      message = error.userMessage;
+    } else if (error instanceof HttpError) {
+      // Limits: say when it resets, in the owner's own time zone.
+      message = error.retryAt
+        ? `${error.message} You can chat again from ${formatRetry(error.retryAt, new Date(), await userTimeZone(userId))}.`
+        : error.message;
+    } else if (photo && /photo|getFile|download/i.test(String((error as Error)?.message))) {
+      message = "I couldn't download your photo from Telegram (it may be too large or the connection dropped). Please send it again.";
+    } else {
+      message = "Something went wrong on my side, so I couldn't answer. Please send your message again in a minute.";
+    }
     if (!(error instanceof HttpError)) console.error("buddy failed", error);
     await sendTelegramMessage(chatId, escapeHtml(message));
   }
@@ -291,7 +299,7 @@ async function shoppingFor(chatId: string) {
 async function handleList(chatId: string) {
   const ctx = await shoppingFor(chatId);
   if (!ctx) {
-    await sendTelegramMessage(chatId, "Connect your account first: Love My Plants → ⚙️ Settings → Connect Telegram.");
+    await sendTelegramMessage(chatId, "I don't know whose list to show yet because this chat isn't connected. In the app, go to ⚙️ Settings → Connect Telegram.");
     return;
   }
   const { items, suggestions } = await loadShopping(ctx.homeId);
@@ -306,7 +314,7 @@ async function handleShoppingCallback(
 ) {
   const ctx = await shoppingFor(chatId);
   if (!ctx) {
-    await answerTelegramCallback(cb.id, "This chat isn't connected anymore.");
+    await answerTelegramCallback(cb.id, "This chat isn't linked to an account anymore. Reconnect in the app: Settings → Connect Telegram.");
     return;
   }
   if (action.kind === "bought") {

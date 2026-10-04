@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { SYMPTOMS } from "@/lib/care/rescue";
-import { compressImage } from "@/lib/image/compress";
+import { callApi } from "@/lib/api-client";
+import { readPhoto, uploadPlantPhoto } from "@/lib/image/upload";
 import { createClient } from "@/lib/supabase/client";
 
 type Kind = "whole" | "triage" | "soil";
@@ -29,8 +30,13 @@ export function TriageFlow({ plantId, homeId, nickname }: { plantId: string; hom
 
   async function pick(kind: Kind, file: File | undefined) {
     if (!file) return;
-    const blob = await compressImage(file);
-    setShots((prev) => ({ ...prev, [kind]: { blob, url: URL.createObjectURL(blob) } }));
+    try {
+      const blob = await readPhoto(file);
+      setError(null);
+      setShots((prev) => ({ ...prev, [kind]: { blob, url: URL.createObjectURL(blob) } }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
 
   async function submit() {
@@ -42,18 +48,16 @@ export function TriageFlow({ plantId, homeId, nickname }: { plantId: string; hom
       const uploaded = await Promise.all(
         (Object.entries(shots) as [Kind, Shot][]).map(async ([kind, shot]) => {
           const path = `${homeId}/${plantId}/${crypto.randomUUID()}.jpg`;
-          const { error: upErr } = await supabase.storage.from("plant-photos").upload(path, shot.blob, { contentType: "image/jpeg" });
-          if (upErr) throw new Error("Uploading a photo failed. Check your connection and try again.");
+          await uploadPlantPhoto(supabase, path, shot.blob);
           return { path, kind };
         }),
       );
-      const res = await fetch(`/api/plants/${plantId}/assess`, {
+      const checked = await callApi<{ retake?: string }>(`/api/plants/${plantId}/assess`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: uploaded, emergency: true, symptoms, note: note.trim() || undefined }),
+        json: { photos: uploaded, emergency: true, symptoms, note: note.trim() || undefined },
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      if (!checked.ok) throw new Error(checked.error);
+      const json = checked.data;
       if (json.retake) {
         setHint(json.retake);
         setBusy(false);
@@ -61,7 +65,7 @@ export function TriageFlow({ plantId, homeId, nickname }: { plantId: string; hom
       }
       router.refresh(); // the page now shows the rescue plan
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.");
+      setError((e as Error).message);
       setBusy(false);
     }
   }

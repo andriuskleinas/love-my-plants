@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -10,11 +11,10 @@ export function JoinButton({ token }: { token: string }) {
 
   async function join() {
     setBusy(true);
-    const res = await fetch("/api/circle/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-    const json = await res.json().catch(() => ({}));
+    const res = await callApi("/api/circle/join", { method: "POST", json: { token } });
     if (!res.ok) {
       setBusy(false);
-      return setError(json.error ?? "Couldn't join.");
+      return setError(`You haven't joined yet. ${res.error}`);
     }
     router.push("/");
     router.refresh();

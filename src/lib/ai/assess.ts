@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { daylightHours, windowDirectionName, type WindowDirection } from "../care/watering";
+import { AssessmentError, aiFailure, INCOMPLETE_CHECK, REFUSAL_CHECK } from "./ai-errors";
 import { assessmentSchema, type Assessment } from "./schemas";
 
 // Opus 5.5 by default; set ASSESS_MODEL=claude-sonnet-5-5 to trade some quality for cost.
@@ -79,14 +80,7 @@ If a photo needed for a score is missing (e.g. no soil close-up), estimate from 
   - If this is a follow-up during an active rescue, judge progress against the previous check, keep what is working, and give a fresh plan from today for the remaining recovery.
 - Pets: if the species is toxic, mention it in the care profile; be conservative with any pesticide advice and prefer non-chemical options first.`;
 
-export class AssessmentError extends Error {
-  constructor(
-    message: string,
-    readonly userMessage: string,
-  ) {
-    super(message);
-  }
-}
+export { AssessmentError } from "./ai-errors";
 
 function contextText(ctx: AssessContext): string {
   const lines = [
@@ -139,20 +133,14 @@ export async function assessPlant(photos: AssessPhoto[], ctx: AssessContext): Pr
       messages: [{ role: "user", content }],
     });
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) {
-      throw new AssessmentError(error.message, "Our plant doctor is busy. Please try again in a minute.");
-    }
-    if (error instanceof Anthropic.APIError) {
-      throw new AssessmentError(`API ${error.status}: ${error.message}`, "We couldn't check your plant right now. Please try again.");
-    }
-    throw error;
+    throw aiFailure(error, "check");
   }
 
   if (response.stop_reason === "refusal") {
-    throw new AssessmentError("refusal", "We couldn't analyse these photos. Try a clear photo of just the plant.");
+    throw new AssessmentError("refusal", REFUSAL_CHECK);
   }
   if (response.stop_reason === "max_tokens" || !response.parsed_output) {
-    throw new AssessmentError(`unparsed output (${response.stop_reason})`, "Something went wrong reading the results. Please try again.");
+    throw new AssessmentError(`unparsed output (${response.stop_reason})`, INCOMPLETE_CHECK);
   }
   return response.parsed_output;
 }

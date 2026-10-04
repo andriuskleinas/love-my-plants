@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = subscribeSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Invalid subscription.");
+    if (!parsed.success) throw new HttpError(400, "Your browser didn't give us a working notification address. Turn reminders off and on again.");
     const { subscription, timeZone } = parsed.data;
 
     // Endpoints are unique per browser; re-subscribing moves it to this user.

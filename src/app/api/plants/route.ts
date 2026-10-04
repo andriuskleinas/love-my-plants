@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = createSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Please answer the pot and window questions.");
+    if (!parsed.success) throw new HttpError(400, "Answer the pot size, drainage and window questions first; they change how much water your plant needs.");
 
     const homeId = await getManagedHomeId(supabase, userId);
     const { data, error } = await supabase

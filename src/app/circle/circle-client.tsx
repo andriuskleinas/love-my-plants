@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -27,8 +28,12 @@ async function shareLink(url: string, text: string): Promise<string> {
       /* cancelled: fall back to copy */
     }
   }
-  await navigator.clipboard.writeText(url);
-  return "Link copied. Paste it into any chat.";
+  try {
+    await navigator.clipboard.writeText(url);
+    return "Link copied. Paste it into any chat.";
+  } catch {
+    return "Your browser didn't allow copying automatically. Press and hold the link above to copy it.";
+  }
 }
 
 function LinkBox({ url, text }: { url: string; text: string }) {
@@ -49,14 +54,19 @@ export function CircleMembers({ members }: { members: Member[] }) {
   const router = useRouter();
   const [links, setLinks] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function act(id: string, method: "POST" | "PATCH" | "DELETE", confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(id);
-    const res = await fetch(`/api/circle/${id}`, { method });
-    const json = await res.json().catch(() => ({}));
+    setErrors((e) => ({ ...e, [id]: "" }));
+    const res = await callApi<{ url?: string }>(`/api/circle/${id}`, { method });
     setBusy(null);
-    if (method === "POST" && json.url) setLinks((l) => ({ ...l, [id]: json.url }));
+    if (!res.ok) {
+      const what = method === "POST" ? "No new link was made." : method === "PATCH" ? "Their access wasn't ended." : "They weren't removed.";
+      return setErrors((e) => ({ ...e, [id]: `${what} ${res.error}` }));
+    }
+    if (method === "POST" && res.data.url) setLinks((l) => ({ ...l, [id]: res.data.url! }));
     else router.refresh();
   }
 
@@ -96,6 +106,11 @@ export function CircleMembers({ members }: { members: Member[] }) {
                 Remove
               </button>
             </div>
+          )}
+          {errors[m.id] && (
+            <p role="alert" className="mt-2 text-bad">
+              {errors[m.id]}
+            </p>
           )}
           {links[m.id] && <LinkBox url={links[m.id]} text={`Here's your Love My Plants link, ${m.name} 🌿`} />}
         </li>
@@ -139,11 +154,10 @@ export function InviteForm({
             endsAt: new Date(`${to}T23:59:59`).toISOString(),
             plantIds: chosen,
           };
-    const res = await fetch("/api/circle", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const json = await res.json().catch(() => ({}));
+    const res = await callApi<{ url: string }>("/api/circle", { method: "POST", json: body });
     setBusy(false);
-    if (!res.ok) return setError(json.error ?? "Couldn't create the invite.");
-    setLink({ url: json.url, name });
+    if (!res.ok) return setError(`The invite wasn't created. ${res.error}`);
+    setLink({ url: res.data.url, name });
     setName("");
     router.refresh();
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -17,15 +18,13 @@ export function TripForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/vacations", {
+    const res = await callApi("/api/vacations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       // Leave in the morning of the first day, back in the evening of the last.
-      body: JSON.stringify({ startsAt: new Date(`${from}T06:00:00`).toISOString(), endsAt: new Date(`${to}T20:00:00`).toISOString() }),
+      json: { startsAt: new Date(`${from}T06:00:00`).toISOString(), endsAt: new Date(`${to}T20:00:00`).toISOString() },
     });
-    const json = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) return setError(json.error ?? "Couldn't save.");
+    if (!res.ok) return setError(`Your trip wasn't saved. ${res.error}`);
     router.refresh();
   }
 
@@ -51,6 +50,7 @@ export function TripForm() {
 
 export function PrepList({ tripId, items }: { tripId: string; items: { key: string; text: string; done: boolean }[] }) {
   const [done, setDone] = useState(() => new Set(items.filter((i) => i.done).map((i) => i.key)));
+  const [error, setError] = useState<string | null>(null);
 
   async function toggle(key: string) {
     const next = !done.has(key);
@@ -59,15 +59,21 @@ export function PrepList({ tripId, items }: { tripId: string; items: { key: stri
     if (next) optimistic.add(key);
     else optimistic.delete(key);
     setDone(optimistic);
-    const res = await fetch(`/api/vacations/${tripId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, done: next }),
-    });
-    if (!res.ok) setDone(before);
+    setError(null);
+    const res = await callApi(`/api/vacations/${tripId}`, { method: "PATCH", json: { key, done: next } });
+    if (!res.ok) {
+      setDone(before);
+      setError(`That tick wasn't saved. ${res.error}`);
+    }
   }
 
   return (
+    <>
+    {error && (
+      <p role="alert" className="mb-2 text-sm text-bad">
+        {error}
+      </p>
+    )}
     <ul className="space-y-2">
       {items.map((i) => (
         <li key={i.key} className="rounded-2xl border border-border bg-surface p-3 text-sm">
@@ -78,21 +84,31 @@ export function PrepList({ tripId, items }: { tripId: string; items: { key: stri
         </li>
       ))}
     </ul>
+    </>
   );
 }
 
 export function CancelTrip({ tripId }: { tripId: string }) {
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
   return (
-    <button
-      onClick={async () => {
-        if (!window.confirm("Cancel this trip? Your reminders continue as normal.")) return;
-        await fetch(`/api/vacations/${tripId}`, { method: "DELETE" });
-        router.refresh();
-      }}
-      className="mt-10 text-sm text-muted"
-    >
-      Cancel trip
-    </button>
+    <div className="mt-10">
+      <button
+        onClick={async () => {
+          if (!window.confirm("Cancel this trip? Your reminders continue as normal.")) return;
+          const res = await callApi(`/api/vacations/${tripId}`, { method: "DELETE" });
+          if (!res.ok) return setError(`The trip wasn't cancelled. ${res.error}`);
+          router.refresh();
+        }}
+        className="text-sm text-muted"
+      >
+        Cancel trip
+      </button>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-bad">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

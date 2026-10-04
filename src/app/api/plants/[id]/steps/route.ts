@@ -1,3 +1,4 @@
+import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { assessmentSchema } from "@/lib/ai/schemas";
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Invalid request.");
+    if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const { assessmentId, index, done } = parsed.data;
 
     if (!done) {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       .maybeSingle();
     const action = row ? assessmentSchema.safeParse(row.raw).data?.actions[index] : undefined;
     const plant = Array.isArray(row?.plant) ? row.plant[0] : row?.plant;
-    if (!action || !plant) throw new HttpError(404, "Step not found.");
+    if (!action || !plant) throw new HttpError(404, "This step is from an older check and can't be ticked anymore. Refresh the page to see the current steps.");
 
     const { error } = await supabase.from("care_events").upsert(
       {

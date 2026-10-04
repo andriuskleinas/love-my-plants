@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useEffect, useState } from "react";
 
 type State = "loading" | "unsupported" | "needs-install" | "off" | "on" | "blocked";
@@ -58,18 +59,19 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!),
         }));
-      const res = await fetch("/api/push/subscribe", {
+      const res = await callApi("/api/push/subscribe", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscription: sub.toJSON(),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        }),
+        json: { subscription: sub.toJSON(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(res.error);
       setState("on");
-    } catch {
-      setMessage("Couldn't turn on reminders. Please try again.");
+    } catch (e) {
+      const reason = e instanceof Error && e.message ? e.message : "";
+      setMessage(
+        reason
+          ? `Reminders weren't turned on. ${reason}`
+          : "Reminders weren't turned on because the browser refused to set up notifications (this can happen in private windows). Try a normal window.",
+      );
     } finally {
       setBusy(false);
     }
@@ -80,11 +82,12 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
-      await fetch("/api/push/subscribe", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint: sub.endpoint }),
-      });
+      const res = await callApi("/api/push/subscribe", { method: "DELETE", json: { endpoint: sub.endpoint } });
+      if (!res.ok) {
+        setMessage(`Reminders are still on. ${res.error}`);
+        setBusy(false);
+        return;
+      }
       await sub.unsubscribe();
     }
     setState("off");
@@ -101,11 +104,10 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
 
-    const res = await fetch("/api/push/test", { method: "POST" });
-    const json = await res.json().catch(() => ({}));
+    const res = await callApi("/api/push/test", { method: "POST" });
     if (!res.ok) {
       navigator.serviceWorker.removeEventListener("message", onMessage);
-      setMessage(json.error ?? "Couldn't send.");
+      setMessage(`The test wasn't sent. ${res.error}`);
       setBusy(false);
       return;
     }

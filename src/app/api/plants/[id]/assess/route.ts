@@ -39,20 +39,20 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Please add at least one photo.");
+    if (!parsed.success) throw new HttpError(400, "Add at least one photo of the whole plant first; the check needs it.");
 
     const { data: plant } = await supabase
       .from("plants")
       .select("id, home_id, species_name, pot_diameter_cm, pot_material, has_drainage, window_direction, cover_photo_id")
       .eq("id", plantId)
       .maybeSingle();
-    if (!plant) throw new HttpError(404, "Plant not found.");
+    if (!plant) throw new HttpError(404, "This plant doesn't exist anymore. It may have been deleted. Go back to your plants and refresh.");
 
     // Photos must live in this plant's own folder.
     const prefix = `${plant.home_id}/${plant.id}/`;
     const photos = parsed.data.photos;
     if (photos.some((p) => !p.path.startsWith(prefix) || p.path.includes(".."))) {
-      throw new HttpError(400, "Invalid photo.");
+      throw new HttpError(400, "That photo couldn't be used because it doesn't belong to this plant. Please take the photo again.");
     }
 
     await consumeAiQuota(userId);
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     const images: AssessPhoto[] = await Promise.all(
       photos.map(async (p) => {
         const { data, error } = await supabase.storage.from(PHOTO_BUCKET).download(p.path);
-        if (error || !data) throw new HttpError(400, "We couldn't read one of the photos. Please retake it.");
+        if (error || !data) throw new HttpError(400, "One of the photos didn't finish uploading, so we couldn't read it. Please take it again.");
         const mediaType = (["image/png", "image/webp"].includes(data.type) ? data.type : "image/jpeg") as AssessPhoto["mediaType"];
         return { kind: p.kind, mediaType, base64: Buffer.from(await data.arrayBuffer()).toString("base64") };
       }),
@@ -127,7 +127,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     });
 
     if (emergency && assessment.photoQuality.ok && !assessment.rescuePlan) {
-      throw new AssessmentError("emergency check without rescue plan", "We couldn't build a rescue plan. Please try again.");
+      throw new AssessmentError(
+        "emergency check without rescue plan",
+        "The check finished but no rescue plan came back, so nothing was saved. Please try again; it usually works on the second try.",
+      );
     }
     if (!assessment.photoQuality.ok) {
       return NextResponse.json({ retake: assessment.photoQuality.retakeHint ?? "Please take a clearer photo of the whole plant." });
@@ -261,7 +264,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
   } catch (error) {
     if (error instanceof AssessmentError) {
       console.error("assessment failed:", error.message);
-      return NextResponse.json({ error: error.userMessage }, { status: 502 });
+      return NextResponse.json({ error: error.userMessage }, { status: error.status });
     }
     return errorResponse(error);
   }

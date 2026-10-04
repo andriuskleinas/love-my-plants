@@ -1,3 +1,4 @@
+import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { answerAsSitter } from "@/lib/care/sitter.server";
@@ -11,9 +12,9 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/sit/[to
   try {
     const { token } = await ctx.params;
     const sitter = await sitterForToken(token);
-    if (!sitter) throw new HttpError(404, "This link isn't valid anymore.");
+    if (!sitter) throw new HttpError(404, "This plant-sitting link doesn't work anymore. The owner may have replaced it with a new one. Ask them to send the link again.");
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Invalid request.");
+    if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const result = await answerAsSitter(sitter, parsed.data.taskId, parsed.data.outcome);
     return NextResponse.json({ nextDueAt: result.nextDueAt });
   } catch (error) {

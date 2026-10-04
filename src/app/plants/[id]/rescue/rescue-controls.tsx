@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { RescueOutcome } from "@/lib/care/rescue";
@@ -22,14 +23,10 @@ export function RescueSteps({
     else optimistic.delete(index);
     setDone(optimistic);
     setError(null);
-    const res = await fetch(`/api/plants/${plantId}/rescue`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stepIndex: index, done: next }),
-    });
+    const res = await callApi(`/api/plants/${plantId}/rescue`, { method: "PATCH", json: { stepIndex: index, done: next } });
     if (!res.ok) {
       setDone(before);
-      setError((await res.json().catch(() => ({}))).error ?? "Couldn't save that tick.");
+      setError(`That tick wasn't saved. ${res.error}`);
     }
   }
 
@@ -70,20 +67,17 @@ const OUTCOMES: { outcome: RescueOutcome; label: string; confirm: string }[] = [
 export function EndRescue({ plantId, nickname }: { plantId: string; nickname: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function end(outcome: RescueOutcome, confirmText: string) {
     if (!window.confirm(confirmText)) return;
     setBusy(true);
-    const res = await fetch(`/api/plants/${plantId}/rescue`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ outcome }),
-    });
+    setError(null);
+    const res = await callApi(`/api/plants/${plantId}/rescue`, { method: "POST", json: { outcome } });
     setBusy(false);
-    if (res.ok) {
-      router.push(outcome === "lost" ? "/" : `/plants/${plantId}`);
-      router.refresh();
-    }
+    if (!res.ok) return setError(`The rescue wasn't ended. ${res.error}`);
+    router.push(outcome === "lost" ? "/" : `/plants/${plantId}`);
+    router.refresh();
   }
 
   return (
@@ -100,6 +94,11 @@ export function EndRescue({ plantId, nickname }: { plantId: string; nickname: st
             {o.label}
           </button>
         ))}
+        {error && (
+          <p role="alert" className="text-bad">
+            {error}
+          </p>
+        )}
       </div>
     </details>
   );

@@ -11,7 +11,8 @@ import {
   type CardinalDirection,
   type WindowDirection,
 } from "@/lib/care/watering";
-import { compressImage } from "@/lib/image/compress";
+import { callApi } from "@/lib/api-client";
+import { readPhoto, uploadPlantPhoto } from "@/lib/image/upload";
 import { createClient } from "@/lib/supabase/client";
 
 type Kind = "whole" | "soil" | "spot";
@@ -109,13 +110,13 @@ export function RegisterFlow() {
     if (!file) return;
     setError(null);
     try {
-      const blob = await compressImage(file);
+      const blob = await readPhoto(file);
       setShots((prev) => {
         if (prev[kind]) URL.revokeObjectURL(prev[kind]!.url);
         return { ...prev, [kind]: { blob, url: URL.createObjectURL(blob) } };
       });
-    } catch {
-      setError("We couldn't read that photo. Please try another one.");
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -141,14 +142,12 @@ export function RegisterFlow() {
     try {
       let current = plant;
       if (!current) {
-        const res = await fetch("/api/plants", {
+        const created = await callApi<{ id: string; homeId: string }>("/api/plants", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ potDiameterCm: potCm, potMaterial: material, hasDrainage: drainage, windowDirection: windowDir }),
+          json: { potDiameterCm: potCm, potMaterial: material, hasDrainage: drainage, windowDirection: windowDir },
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error);
-        current = json as { id: string; homeId: string };
+        if (!created.ok) throw new Error(created.error);
+        current = created.data;
         setPlant(current);
       }
 
@@ -156,21 +155,17 @@ export function RegisterFlow() {
       const uploaded = await Promise.all(
         (Object.entries(shots) as [Kind, Shot][]).map(async ([kind, shot]) => {
           const path = `${current!.homeId}/${current!.id}/${crypto.randomUUID()}.jpg`;
-          const { error: upErr } = await supabase.storage
-            .from("plant-photos")
-            .upload(path, shot.blob, { contentType: "image/jpeg" });
-          if (upErr) throw new Error("Uploading a photo failed. Check your connection and try again.");
+          await uploadPlantPhoto(supabase, path, shot.blob);
           return { path, kind };
         }),
       );
 
-      const res = await fetch(`/api/plants/${current.id}/assess`, {
+      const checked = await callApi<{ retake?: string; assessment: Assessment }>(`/api/plants/${current.id}/assess`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: uploaded }),
+        json: { photos: uploaded },
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
+      if (!checked.ok) throw new Error(checked.error);
+      const json = checked.data;
       if (json.retake) {
         setRetakeHint(json.retake);
         setStep("photos");
@@ -182,7 +177,7 @@ export function RegisterFlow() {
       setNickname(result.suggestedNickname ?? result.species[0]?.commonName ?? "My plant");
       setStep("result");
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "Something went wrong. Please try again.");
+      setError((e as Error).message);
       setStep("questions");
     }
   }
@@ -191,13 +186,12 @@ export function RegisterFlow() {
     if (!plant) return;
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/plants/${plant.id}`, {
+    const res = await callApi(`/api/plants/${plant.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname: nickname.trim() || "My plant", speciesName: species || undefined }),
+      json: { nickname: nickname.trim() || "My plant", speciesName: species || undefined },
     });
     if (!res.ok) {
-      setError((await res.json()).error ?? "Couldn't save. Please try again.");
+      setError(res.error);
       setBusy(false);
       return;
     }

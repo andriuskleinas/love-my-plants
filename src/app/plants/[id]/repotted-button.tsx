@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { STANDARD_POT_SIZES_CM } from "@/lib/care/repot";
@@ -16,13 +17,9 @@ export function RepottedButton({ plantId, currentCm, recommendedCm }: { plantId:
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/plants/${plantId}/repotted`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ potDiameterCm: size }),
-    });
+    const res = await callApi(`/api/plants/${plantId}/repotted`, { method: "POST", json: { potDiameterCm: size } });
     setBusy(false);
-    if (!res.ok) return setError((await res.json().catch(() => ({}))).error ?? "Couldn't save.");
+    if (!res.ok) return setError(`The repot wasn't saved. ${res.error}`);
     setOpen(false);
     router.refresh();
   }

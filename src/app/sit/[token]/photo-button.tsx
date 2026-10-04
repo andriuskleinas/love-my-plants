@@ -1,21 +1,27 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useState } from "react";
-import { compressImage } from "@/lib/image/compress";
+import { readPhoto } from "@/lib/image/upload";
 
 export function SitterPhotoButton({ token, plantId, nickname }: { token: string; plantId: string; nickname: string }) {
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
 
   async function send(file: File | undefined) {
     if (!file) return;
     setState("sending");
+    setError(null);
     try {
       const form = new FormData();
       form.set("plantId", plantId);
-      form.set("photo", new File([await compressImage(file)], "photo.jpg", { type: "image/jpeg" }));
-      const res = await fetch(`/api/sit/${token}/photo`, { method: "POST", body: form });
-      setState(res.ok ? "sent" : "error");
-    } catch {
+      form.set("photo", new File([await readPhoto(file)], "photo.jpg", { type: "image/jpeg" }));
+      const res = await callApi(`/api/sit/${token}/photo`, { method: "POST", body: form });
+      if (res.ok) return setState("sent");
+      setError(`The photo wasn't sent. ${res.error}`);
+      setState("error");
+    } catch (e) {
+      setError((e as Error).message);
       setState("error");
     }
   }
@@ -34,8 +40,9 @@ export function SitterPhotoButton({ token, plantId, nickname }: { token: string;
       />
       {state === "sending" && "Sending…"}
       {state === "sent" && "✓ Photo sent. Thank you!"}
-      {state === "error" && "Couldn't send. Tap to try again"}
+      {state === "error" && "Tap to try again"}
       {state === "idle" && `📷 Send a photo of ${nickname}`}
+      {error && <span className="mt-1 block text-bad">{error}</span>}
     </label>
   );
 }

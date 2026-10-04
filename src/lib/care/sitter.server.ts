@@ -59,12 +59,12 @@ const OWNER_TEXT: Record<WaterOutcome, (sitter: string, plant: string, next: str
 
 /** A sitter answers a watering reminder: checks access, records it, and tells the owner. */
 export async function answerAsSitter(sitter: SitterAccess, taskId: string, outcome: WaterOutcome, now = new Date()) {
-  if (sitter.status !== "active") throw new HttpError(403, "Your plant-sitting dates aren't active right now.");
+  if (sitter.status !== "active") throw new HttpError(403, "Plant-sitting hasn't started yet or has already ended, so this can't be marked. Check your dates with the plant owner.");
   const admin = createAdminClient();
   const { data: task } = await admin.from("care_tasks").select("plant_id, type, plant:plants(nickname, home_id)").eq("id", taskId).maybeSingle();
   const plant = Array.isArray(task?.plant) ? task.plant[0] : task?.plant;
   if (!task || task.type !== "water" || !plant || plant.home_id !== sitter.homeId || !sitter.plantIds.includes(task.plant_id)) {
-    throw new HttpError(404, "This plant isn't in your list.");
+    throw new HttpError(404, "This plant isn't one of the plants you're looking after, so it can't be changed from your link.");
   }
   const result = await answerWaterTask(admin, sitter.ownerId, taskId, outcome, now, { memberId: sitter.memberId });
   const next = dueLabel(new Date(result.nextDueAt), now);

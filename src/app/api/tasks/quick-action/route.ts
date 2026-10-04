@@ -1,3 +1,4 @@
+import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { answerWaterTask } from "@/lib/care/tasks.server";
@@ -15,12 +16,16 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Invalid request.");
+    if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const outcome = parsed.data.action === "done" ? "dry" : "snooze";
     const results = await Promise.allSettled(
       parsed.data.taskIds.map((id) => answerWaterTask(supabase, userId, id, outcome)),
     );
-    return NextResponse.json({ updated: results.filter((r) => r.status === "fulfilled").length });
+    const updated = results.filter((r) => r.status === "fulfilled").length;
+    if (!updated) {
+      throw new HttpError(409, "These reminders were already answered or removed, so there was nothing to save.");
+    }
+    return NextResponse.json({ updated });
   } catch (error) {
     return errorResponse(error);
   }

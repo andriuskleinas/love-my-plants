@@ -10,10 +10,10 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = tripSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Please choose your dates.");
+    if (!parsed.success) throw new HttpError(400, "Choose when you leave and when you're back first.");
     const { startsAt, endsAt } = parsed.data;
-    if (new Date(endsAt) <= new Date(startsAt)) throw new HttpError(400, "The return date must be after the departure date.");
-    if (new Date(endsAt) < new Date()) throw new HttpError(400, "That trip is already over.");
+    if (new Date(endsAt) <= new Date(startsAt)) throw new HttpError(400, "Your return date is before your departure date. Please check the dates.");
+    if (new Date(endsAt) < new Date()) throw new HttpError(400, "Those dates are in the past. Choose dates from today onwards.");
 
     const homeId = await getManagedHomeId(supabase, userId);
     const { data, error } = await supabase

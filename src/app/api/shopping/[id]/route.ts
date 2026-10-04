@@ -1,3 +1,4 @@
+import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { setItemStatus, shoppingHomeFor } from "@/lib/care/shopping.server";
@@ -11,9 +12,9 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/shoppi
     const { id } = await ctx.params;
     const userId = await requireUserId(await createClient());
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Invalid request.");
+    if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const homeId = await shoppingHomeFor(userId);
-    if (!homeId || !(await setItemStatus(homeId, id, parsed.data.status))) throw new HttpError(404, "Item not found.");
+    if (!homeId || !(await setItemStatus(homeId, id, parsed.data.status))) throw new HttpError(404, "This item isn't on the list anymore. It may have been removed on another device. Refresh the page.");
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

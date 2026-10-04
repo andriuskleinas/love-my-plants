@@ -43,7 +43,20 @@ self.addEventListener("notificationclick", (event) => {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: event.action, taskIds }),
-      }),
+      })
+        .then((res) => {
+          if (res.ok) return;
+          const why =
+            res.status === 409
+              ? "it was already answered (maybe by someone else)"
+              : res.status === 401
+              ? "you're signed out of the app"
+              : res.status === 429
+                ? "too many requests were made"
+                : "of a problem on our side";
+          return showFailure(`Your answer wasn't saved because ${why}. Open the app to answer there.`, url);
+        })
+        .catch(() => showFailure("Your answer wasn't saved because your phone was offline. Open the app to answer there.", url)),
     );
     return;
   }
@@ -59,3 +72,12 @@ self.addEventListener("notificationclick", (event) => {
     }),
   );
 });
+
+function showFailure(body, url) {
+  return self.registration.showNotification("⚠️ Not saved", {
+    body,
+    icon: "/icons/192",
+    tag: "quick-action-failed",
+    data: { url: url || "/", taskIds: [] },
+  });
+}

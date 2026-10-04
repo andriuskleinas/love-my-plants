@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LocationCard } from "./location-card";
@@ -22,12 +23,8 @@ export function SettingsForm(props: {
 
   async function save(update: { digestTime?: string; displayName?: string }) {
     setSaved(null);
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(update),
-    });
-    setSaved(res.ok ? "Saved" : "Couldn't save. Please try again.");
+    const res = await callApi("/api/profile", { method: "PATCH", json: update });
+    setSaved(res.ok ? "Saved" : `Not saved. ${res.error}`);
   }
 
   async function signOut() {

@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -45,17 +46,16 @@ export function WaterCard({
   async function answer(outcome: WaterOutcome) {
     setBusy(true);
     setError(null);
-    const res = await fetch(answerEndpoint ?? `/api/tasks/${taskId}/answer`, {
+    const res = await callApi<{ nextDueAt: string }>(answerEndpoint ?? `/api/tasks/${taskId}/answer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(answerEndpoint ? { taskId, outcome } : { outcome }),
+      json: answerEndpoint ? { taskId, outcome } : { outcome },
     });
-    const json = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setError(json.error ?? "Couldn't save. Please try again.");
+      setError(`Your answer wasn't saved. ${res.error}`);
       return;
     }
+    const json = res.data;
     const next = outcome === "dry" || outcome === "dry_drooping" ? ` Next time: ${dueLabel(new Date(json.nextDueAt))}.` : "";
     setResult(RESULT_TEXT[outcome] + next);
     setTimeout(() => router.refresh(), 2500);

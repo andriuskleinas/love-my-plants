@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useState } from "react";
 
 type Place = { label: string; area: string; latitude: number; longitude: number };
@@ -22,35 +23,38 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
     setBusy(true);
     setMessage(null);
     setResults(null);
-    const res = await fetch(`/api/location?q=${encodeURIComponent(query.trim())}`);
-    const json = await res.json().catch(() => ({}));
+    const res = await callApi<{ places: Place[] }>(`/api/location?q=${encodeURIComponent(query.trim())}`);
     setBusy(false);
-    if (!res.ok) return setMessage(json.error ?? "Search failed. Please try again.");
-    setResults(json.places);
-    if (!json.places.length) setMessage("No matches. Try adding the city or country.");
+    if (!res.ok) return setMessage(`The search didn't work. ${res.error}`);
+    setResults(res.data.places);
+    if (!res.data.places.length) setMessage(`Nothing was found for "${query.trim()}". Try adding the city or country, e.g. "Gedimino 9, Vilnius".`);
   }
 
   function useDeviceLocation() {
-    if (!("geolocation" in navigator)) return setMessage("This browser can't share its location.");
+    if (!("geolocation" in navigator)) return setMessage("This browser can't share its location. Search by address instead.");
     setBusy(true);
     setMessage(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const res = await fetch("/api/location", {
+        const res = await callApi<{ place: Place }>("/api/location", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+          json: { latitude: pos.coords.latitude, longitude: pos.coords.longitude },
         });
-        const json = await res.json().catch(() => ({}));
         if (!res.ok) {
           setBusy(false);
-          return setMessage(json.error ?? "Couldn't look up your location.");
+          return setMessage(`Your location couldn't be looked up. ${res.error}`);
         }
-        await choose(json.place);
+        await choose(res.data.place);
       },
-      () => {
+      (err) => {
         setBusy(false);
-        setMessage("Location access was denied. Search by address instead.");
+        setMessage(
+          err.code === err.PERMISSION_DENIED
+            ? "Location access is blocked for this site, so we can't find you. Allow location in your browser's site settings, or search by address instead."
+            : err.code === err.TIMEOUT
+              ? "Finding your location took too long (weak GPS or Wi-Fi signal). Try again, or search by address instead."
+              : "Your device couldn't work out where you are right now. Search by address instead.",
+        );
       },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 60 * 60 * 1000 },
     );
@@ -58,13 +62,12 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
 
   async function choose(place: Place) {
     setBusy(true);
-    const res = await fetch("/api/profile", {
+    const res = await callApi("/api/profile", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ location: { latitude: place.latitude, longitude: place.longitude, area: place.area } }),
+      json: { location: { latitude: place.latitude, longitude: place.longitude, area: place.area } },
     });
     setBusy(false);
-    if (!res.ok) return setMessage("Couldn't save. Please try again.");
+    if (!res.ok) return setMessage(`Your location wasn't saved. ${res.error}`);
     setName(place.area);
     setEditing(false);
     setResults(null);

@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Choose the new pot size.");
+    if (!parsed.success) throw new HttpError(400, "Choose the size of the new pot first.");
 
     const now = new Date();
     const { data: plant, error } = await supabase
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       .select("id, home_id")
       .maybeSingle();
     if (error) throw error;
-    if (!plant) throw new HttpError(403, "Only household members can change this plant.");
+    if (!plant) throw new HttpError(403, "Only household members can change this plant. Plant-sitters can water and send photos, but not change plants.");
 
     await supabase.from("care_events").insert({
       plant_id: id,

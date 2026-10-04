@@ -11,12 +11,18 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = safeNext(searchParams.get("next"), origin);
 
+  // Supabase sends errors back on the link itself (e.g. error_code=otp_expired).
+  const linkError = searchParams.get("error_code") ?? searchParams.get("error");
+  if (linkError) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(linkError)}`, origin));
+
   const supabase = await createClient();
   const { error } = tokenHash && type
     ? await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
     : code
       ? await supabase.auth.exchangeCodeForSession(code)
-      : { error: new Error("missing token") };
+      : { error: Object.assign(new Error("missing token"), { code: "missing" }) };
 
-  return NextResponse.redirect(new URL(error ? "/login?error=link" : next, origin));
+  if (!error) return NextResponse.redirect(new URL(next, origin));
+  const reason = (error as { code?: string }).code ?? (/code verifier/i.test(error.message) ? "pkce" : "link");
+  return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(reason)}`, origin));
 }

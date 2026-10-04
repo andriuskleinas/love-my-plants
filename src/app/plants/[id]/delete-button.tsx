@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,9 +12,9 @@ export function DeletePlantButton({ id, nickname }: { id: string; nickname: stri
   async function onDelete() {
     if (!window.confirm(`Delete ${nickname} and all its photos? This can't be undone.`)) return;
     setBusy(true);
-    const res = await fetch(`/api/plants/${id}`, { method: "DELETE" });
+    const res = await callApi(`/api/plants/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      setError((await res.json()).error ?? "Couldn't delete.");
+      setError(`${nickname} wasn't deleted. ${res.error}`);
       setBusy(false);
       return;
     }

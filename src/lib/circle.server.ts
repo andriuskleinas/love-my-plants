@@ -82,7 +82,7 @@ export async function acceptHouseholdInvite(token: string, userId: string): Prom
     .eq("invite_token_hash", hashToken(token))
     .eq("role", "household")
     .maybeSingle();
-  if (!m || m.user_id) return "This invite link has already been used or was cancelled. Ask for a new one.";
+  if (!m || m.user_id) return "This invite link can't be used anymore: each household invite works once, and this one was already accepted or cancelled. Ask for a new link.";
 
   const { data: existing } = await admin.from("home_members").select("id").eq("home_id", m.home_id).eq("user_id", userId).maybeSingle();
   if (existing) {
@@ -93,5 +93,5 @@ export async function acceptHouseholdInvite(token: string, userId: string): Prom
     .from("home_members")
     .update({ user_id: userId, accepted_at: new Date().toISOString(), invite_token_hash: null })
     .eq("id", m.id);
-  return error ? "Couldn't join. Please try again." : null;
+  return error ? "Joining failed because of a problem saving your membership on our side. Please try the link again in a minute." : null;
 }

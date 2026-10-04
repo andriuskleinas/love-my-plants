@@ -3,26 +3,15 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { linkErrorMessage, signInErrorMessage } from "@/lib/auth-errors";
 import { createClient } from "@/lib/supabase/client";
-
-/** Plain-language reasons for the common sign-in failures. */
-function errorMessage(code: string | undefined, status: number | undefined): string {
-  if (code === "over_email_send_rate_limit") {
-    return "Too many sign-in emails were sent recently. Please wait an hour, or use the newest link already in your inbox.";
-  }
-  if (code === "over_request_rate_limit" || status === 429) return "Too many tries. Please wait a minute and try again.";
-  if (code === "email_address_invalid" || code === "validation_failed") return "That email address doesn't look right. Please check it.";
-  return "Something went wrong sending the email. Please try again in a moment.";
-}
 
 function LoginForm() {
   const params = useSearchParams();
   const next = params.get("next") ?? "/";
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [error, setError] = useState<string | null>(
-    params.get("error") ? "That sign-in link has expired or was already used. Enter your email for a new one." : null,
-  );
+  const [error, setError] = useState<string | null>(params.get("error") ? linkErrorMessage(params.get("error")!) : null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,12 +19,17 @@ function LoginForm() {
     setError(null);
     const redirect = new URL("/auth/confirm", window.location.origin);
     redirect.searchParams.set("next", next);
-    const { error: otpError } = await createClient().auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirect.toString() },
-    });
+    let otpError;
+    try {
+      ({ error: otpError } = await createClient().auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirect.toString() },
+      }));
+    } catch (e) {
+      otpError = e as { code?: string; status?: number; message?: string };
+    }
     if (otpError) {
-      setError(errorMessage(otpError.code, otpError.status));
+      setError(signInErrorMessage(otpError));
       setState("error");
     } else {
       setState("sent");
@@ -58,6 +52,9 @@ function LoginForm() {
     <form onSubmit={onSubmit} className="w-full">
       <h1 className="text-2xl font-semibold">Sign in</h1>
       <p className="mt-1 text-muted">No password. We&apos;ll email you a link.</p>
+      {next !== "/" && !error && (
+        <p className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">You need to be signed in to open that page. Sign in and you&apos;ll be taken straight there.</p>
+      )}
       <label htmlFor="email" className="mt-6 block text-sm font-medium">
         Email
       </label>

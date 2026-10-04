@@ -1,5 +1,6 @@
 "use client";
 
+import { callApi } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,21 +9,27 @@ type Item = { id: string; item: string; reason: string | null; status: "open" | 
 export function ItemList({ items }: { items: Item[] }) {
   const router = useRouter();
   const [state, setState] = useState(() => new Map(items.map((i) => [i.id, i.status])));
+  const [error, setError] = useState<string | null>(null);
 
   async function set(id: string, status: Item["status"]) {
     const before = new Map(state);
     setState(new Map(state).set(id, status));
-    const res = await fetch(`/api/shopping/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    if (!res.ok) setState(before);
-    else if (status === "dismissed") router.refresh();
+    setError(null);
+    const res = await callApi(`/api/shopping/${id}`, { method: "PATCH", json: { status } });
+    if (!res.ok) {
+      setState(before);
+      setError(`That change wasn't saved. ${res.error}`);
+    } else if (status === "dismissed") router.refresh();
   }
 
   if (!items.length) return <p className="mt-6 rounded-2xl bg-leaf-soft p-4 text-sm">Nothing on your list yet.</p>;
   return (
+    <>
+    {error && (
+      <p role="alert" className="mt-6 text-sm text-bad">
+        {error}
+      </p>
+    )}
     <ul className="mt-6 space-y-2">
       {items.map((i) => {
         const bought = state.get(i.id) === "bought";
@@ -50,6 +57,7 @@ export function ItemList({ items }: { items: Item[] }) {
         );
       })}
     </ul>
+    </>
   );
 }
 
@@ -57,18 +65,22 @@ export function AddItem() {
   const router = useRouter();
   const [item, setItem] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!item.trim()) return;
     setBusy(true);
-    await fetch("/api/shopping", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item }) });
-    setItem("");
+    setError(null);
+    const res = await callApi("/api/shopping", { method: "POST", json: { item } });
     setBusy(false);
+    if (!res.ok) return setError(`"${item.trim()}" wasn't added. ${res.error}`);
+    setItem("");
     router.refresh();
   }
 
   return (
+    <>
     <form onSubmit={add} className="mt-3 flex gap-2">
       <label htmlFor="new-item" className="sr-only">
         Add an item
@@ -85,23 +97,40 @@ export function AddItem() {
         Add
       </button>
     </form>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-bad">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
 export function AddSuggestions() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
+    <>
     <button
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await fetch("/api/shopping", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ suggestions: true }) });
+        setError(null);
+        const res = await callApi("/api/shopping", { method: "POST", json: { suggestions: true } });
+        setBusy(false);
+        if (!res.ok) return setError(`The suggestions weren't added. ${res.error}`);
         router.refresh();
       }}
       className="mt-3 rounded-full bg-leaf px-4 py-2 font-medium text-background disabled:opacity-50"
     >
       Add these to my list
     </button>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-bad">
+          {error}
+        </p>
+      )}
+    </>
   );
 }

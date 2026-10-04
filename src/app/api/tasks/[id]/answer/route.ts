@@ -1,3 +1,4 @@
+import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { answerWaterTask } from "@/lib/care/tasks.server";
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/tasks/[
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Unknown answer.");
+    if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     return NextResponse.json(await answerWaterTask(supabase, userId, id, parsed.data.outcome));
   } catch (error) {
     return errorResponse(error);

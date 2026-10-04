@@ -6,7 +6,7 @@ import { rescueDay } from "@/lib/care/rescue";
 import { daylightHours, windowDirectionName, type WindowDirection } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
 import { createAdminClient } from "@/lib/supabase/server";
-import { AssessmentError } from "./assess";
+import { AssessmentError, aiFailure } from "./ai-errors";
 import { assessmentSchema, buddyReplySchema, type BuddyReply } from "./schemas";
 
 // Opus 5.5 at low effort keeps chat replies quick; CHAT_MODEL can override.
@@ -150,19 +150,16 @@ export async function askBuddy(input: BuddyInput): Promise<BuddyReply> {
       messages,
     });
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) {
-      throw new AssessmentError(error.message, "I'm a bit busy right now. Please try again in a minute.");
-    }
-    if (error instanceof Anthropic.APIError) {
-      throw new AssessmentError(`API ${error.status}: ${error.message}`, "Sorry, I couldn't answer that right now. Please try again.");
-    }
-    throw error;
+    throw aiFailure(error, "chat");
   }
   if (response.stop_reason === "refusal") {
-    throw new AssessmentError("refusal", "Sorry, I can't help with that one. Ask me anything about your plants!");
+    throw new AssessmentError(
+      "refusal",
+      "I can't answer that one because the AI's safety filter declined it. Try asking about your plants in a different way.",
+    );
   }
   if (!response.parsed_output) {
-    throw new AssessmentError(`unparsed (${response.stop_reason})`, "Sorry, something went wrong. Please try again.");
+    throw new AssessmentError(`unparsed (${response.stop_reason})`, "My answer didn't come through properly. Please send your message again.");
   }
 
   // Keep the history as plain text (photos are summarised by the reply itself).
