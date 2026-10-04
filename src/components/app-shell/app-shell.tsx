@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ComponentType, type ReactNode } from "react";
-import { LogoMark } from "@/components/brand/marks";
+import { Logo } from "@/components/brand/logo";
 import { CartIcon, GearIcon, LeafIcon, MenuIcon, PeopleIcon, PlusIcon, SuitcaseIcon, SunIcon } from "@/components/icons";
 import { AddSheet } from "./add-sheet";
 
@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <>
       <Sidebar path={path} onAdd={() => setAdding(true)} />
-      <div className="flex flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-64">{children}</div>
+      <div className="flex flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-72">{children}</div>
       <TabBar path={path} onAdd={() => setAdding(true)} />
       <AddSheet open={adding} onClose={() => setAdding(false)} />
     </>
@@ -92,10 +92,9 @@ function Sidebar({ path, onAdd }: { path: string; onAdd: () => void }) {
     [AWAY, CIRCLE, SETTINGS],
   ];
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-surface px-4 py-6 lg:flex">
-      <Link href="/" className="flex items-center gap-3 px-2 text-lg font-semibold">
-        <LogoMark size={36} title={null} />
-        Love My Plants
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-border bg-surface px-4 py-6 lg:flex">
+      <Link href="/" aria-label="I Love My Plants, Today" className="px-2">
+        <Logo size={36} withName />
       </Link>
       <button
         onClick={onAdd}
