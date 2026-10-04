@@ -20,7 +20,14 @@ export const metadata: Metadata = {
   openGraph: { title: "Love My Plants", description, siteName: "Love My Plants", type: "website" },
   twitter: { card: "summary_large_image" },
   appleWebApp: { capable: true, title: "My Plants", statusBarStyle: "default" },
-  icons: { apple: "/icons/180" },
+  // Listed explicitly: a metadata `icons` entry stops Next from adding file-based icons.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/icons/180",
+  },
 };
 
 export const viewport: Viewport = {

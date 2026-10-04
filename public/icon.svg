@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Favicon: the 4-square logo redrawn on a 32px grid with heavier strokes, so it reads in a browser tab. -->
+  <rect x="0.5" y="0.5" width="15" height="15" rx="3.2" fill="#8fa877"/>
+  <rect x="16.5" y="0.5" width="15" height="15" rx="3.2" fill="#d9805f"/>
+  <rect x="0.5" y="16.5" width="15" height="15" rx="3.2" fill="#e9dcc0"/>
+  <rect x="16.5" y="16.5" width="15" height="15" rx="3.2" fill="#f2d98b"/>
+  <g fill="none" stroke="#1d1d1b" stroke-linecap="round" stroke-linejoin="round">
+    <!-- I -->
+    <path d="M5 4.4h6M8 4.4v7.2M5 11.6h6" stroke-width="2.2"/>
+    <!-- heart -->
+    <path d="M24 12.4C20.6 10.3 18.9 8.4 19.2 6.4c.3-1.6 2.3-2.3 3.5-1.3.6.4 1 1 1.3 1.6.3-.6.7-1.2 1.3-1.6 1.2-1 3.2-.3 3.5 1.3.3 2-1.4 3.9-4.8 6Z" fill="#f6f1e4" stroke-width="1.7"/>
+    <!-- My -->
+    <path d="M2.8 28.6l.5-8.2 2.4 5 2.4-5 .5 8.2" stroke-width="1.7"/>
+    <path d="M10 22.6l1.7 4M13.6 22.6l-2.3 6.6c-.4 1-1.1 1.3-1.9.9" stroke-width="1.6"/>
+    <!-- potted plant -->
+    <path d="M19.6 24.4h8.8l-1.2 5.4h-6.4Z" fill="#d9805f" stroke-width="1.5"/>
+    <path d="M24 24.4v-5" stroke-width="1.5"/>
+    <path d="M24 22.4c-2.3 0-3.7-1.3-4-3.2 2.2-.1 3.7 1.2 4 3.2ZM24 20.6c2.3 0 3.7-1.3 4-3.2-2.2-.1-3.7 1.2-4 3.2Z" fill="#8fa877" stroke-width="1.3"/>
+  </g>
+</svg>

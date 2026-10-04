@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Paths reachable without an account: landing, login, auth callbacks, sitter links, webhooks, icons.
-const PUBLIC_PATHS = ["/login", "/auth", "/sit", "/api/sit", "/api/telegram", "/api/cron", "/icons", "/icon", "/opengraph-image", "/manifest.webmanifest", "/sw.js"];
+const PUBLIC_PATHS = ["/login", "/auth", "/sit", "/api/sit", "/api/telegram", "/api/cron", "/icons", "/opengraph-image", "/manifest.webmanifest", "/sw.js"];
 
 /**
  * Per-request Content Security Policy with a script nonce (Next.js applies it to its own
