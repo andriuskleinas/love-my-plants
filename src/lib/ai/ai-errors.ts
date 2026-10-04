@@ -17,28 +17,28 @@ export class AssessmentError extends Error {
 export function aiFailure(error: unknown, kind: "check" | "chat"): AssessmentError {
   const what = kind === "check" ? "The plant check" : "Plant Buddy";
   if (error instanceof Anthropic.RateLimitError) {
-    return new AssessmentError(error.message, `${what} couldn't run because our AI service is getting too many requests right now. Please try again in a minute or two.`, 503);
+    return new AssessmentError(error.message, `${what} couldn't run right now. Please try again in a minute or two.`, 503);
   }
   if (error instanceof Anthropic.APIConnectionTimeoutError) {
-    return new AssessmentError(error.message, `${what} took too long and timed out, so nothing was saved. Please try again.`, 503);
+    return new AssessmentError(error.message, `${what} took too long and nothing was saved. Please try again.`, 503);
   }
   if (error instanceof Anthropic.APIConnectionError) {
-    return new AssessmentError(error.message, `${what} couldn't reach our AI service (a connection problem on our side). Please try again in a minute.`, 503);
+    return new AssessmentError(error.message, `${what} couldn't start. Please try again in a minute.`, 503);
   }
   if (error instanceof Anthropic.InternalServerError) {
     // 500/529: the AI service is overloaded or having an outage.
-    return new AssessmentError(`API ${error.status}: ${error.message}`, `Our AI service is overloaded or having problems right now, so ${what.toLowerCase()} couldn't run. Please try again in a few minutes.`, 503);
+    return new AssessmentError(`API ${error.status}: ${error.message}`, `${what} isn't available right now. Please try again in a few minutes.`, 503);
   }
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError || isBillingError(error)) {
     return new AssessmentError(
       `API ${(error as InstanceType<typeof Anthropic.APIError>).status}: ${(error as Error).message}`,
-      `${what} is unavailable because of a problem with the app's AI account (not something you did). Please try again later.`,
+      `${what} is unavailable right now. Please try again later.`,
     );
   }
   if (error instanceof Anthropic.APIError) {
-    return new AssessmentError(`API ${error.status}: ${error.message}`, `${what} failed because of an unexpected AI service error. Please try again.`);
+    return new AssessmentError(`API ${error.status}: ${error.message}`, `${what} failed. Please try again.`);
   }
-  return new AssessmentError(String(error), `${what} failed unexpectedly. Please try again.`);
+  return new AssessmentError(String(error), `${what} failed. Please try again.`);
 }
 
 function isBillingError(error: unknown): boolean {
@@ -46,6 +46,6 @@ function isBillingError(error: unknown): boolean {
 }
 
 export const REFUSAL_CHECK =
-  "The AI declined to analyse these photos (its safety filter was triggered). This sometimes happens with unclear images. Try a clear, well-lit photo of just the plant.";
+  "These photos couldn't be analysed. Take a clear, well-lit photo of just the plant and try again.";
 export const INCOMPLETE_CHECK =
-  "The check didn't finish properly, so no results were saved. Please try again; it usually works on the second try.";
+  "The check didn't finish and nothing was saved. Please try again.";

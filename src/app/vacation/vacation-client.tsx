@@ -24,7 +24,7 @@ export function TripForm() {
       json: { startsAt: new Date(`${from}T06:00:00`).toISOString(), endsAt: new Date(`${to}T20:00:00`).toISOString() },
     });
     setBusy(false);
-    if (!res.ok) return setError(`Your trip wasn't saved. ${res.error}`);
+    if (!res.ok) return setError(res.error);
     router.refresh();
   }
 
@@ -63,7 +63,7 @@ export function PrepList({ tripId, items }: { tripId: string; items: { key: stri
     const res = await callApi(`/api/vacations/${tripId}`, { method: "PATCH", json: { key, done: next } });
     if (!res.ok) {
       setDone(before);
-      setError(`That tick wasn't saved. ${res.error}`);
+      setError(res.error);
     }
   }
 
@@ -97,7 +97,7 @@ export function CancelTrip({ tripId }: { tripId: string }) {
         onClick={async () => {
           if (!window.confirm("Cancel this trip? Your reminders continue as normal.")) return;
           const res = await callApi(`/api/vacations/${tripId}`, { method: "DELETE" });
-          if (!res.ok) return setError(`The trip wasn't cancelled. ${res.error}`);
+          if (!res.ok) return setError(res.error);
           router.refresh();
         }}
         className="text-sm text-muted"

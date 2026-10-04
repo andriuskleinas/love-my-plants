@@ -19,13 +19,13 @@ export function nextUtcMidnight(now = new Date()): Date {
 }
 
 export const MESSAGES = {
-  offline: "You're offline, so this didn't go through. Check your internet connection and try again.",
-  signedOut: "You've been signed out because your session ended. Please sign in again to continue.",
-  timeout: "This took too long and timed out, so nothing was saved. Please try again.",
-  unavailable: "The app's server is temporarily unavailable, so this didn't go through. Please try again in a few minutes.",
-  server: "Something went wrong on our side, so this didn't go through. Please try again; if it keeps happening, try again later.",
-  badRequest: "The app sent something unexpected, so this didn't go through. Please refresh the page and try again.",
+  offline: "You're offline. Check your internet connection and try again.",
+  signedOut: "You've been signed out. Please sign in again.",
+  timeout: "This took too long and nothing was saved. Please try again.",
+  unavailable: "The app is temporarily unavailable. Please try again in a few minutes.",
+  server: "Something went wrong and this wasn't saved. Please try again.",
+  badRequest: "This didn't go through. Refresh the page and try again.",
   photoUnreadable:
-    "We couldn't open that photo. It may be in a format your browser can't read (like HEIC). Take the photo with the camera button, or choose a JPEG or PNG.",
-  uploadFailed: "The photo didn't finish uploading, probably because of a weak connection. Check your internet and try again.",
+    "This photo can't be opened. Take a new photo with the camera, or choose a JPEG or PNG.",
+  uploadFailed: "The photo didn't upload. Check your connection and try again.",
 } as const;

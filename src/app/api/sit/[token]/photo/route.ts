@@ -14,19 +14,19 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/sit/[to
   try {
     const { token } = await ctx.params;
     const sitter = await sitterForToken(token);
-    if (!sitter || sitter.status !== "active") throw new HttpError(403, "Plant-sitting hasn't started yet or has already ended, so this can't be marked. Check your dates with the plant owner.");
+    if (!sitter || sitter.status !== "active") throw new HttpError(403, "Plant-sitting isn't active today. Check your dates with the plant owner.");
 
     const form = await request.formData();
     const plantId = String(form.get("plantId") ?? "");
     const file = form.get("photo");
-    if (!sitter.plantIds.includes(plantId)) throw new HttpError(404, "This plant isn't one of the plants you're looking after, so it can't be changed from your link.");
+    if (!sitter.plantIds.includes(plantId)) throw new HttpError(404, "This plant isn't on your list. Ask the plant owner if it should be.");
     if (!(file instanceof File) || !TYPES.has(file.type) || file.size > MAX_BYTES) {
-      throw new HttpError(400, "That photo couldn't be sent: it's either bigger than 5 MB or not a JPEG, PNG or WebP image. Take a new photo with the camera instead.");
+      throw new HttpError(400, "This photo can't be sent. Take a new photo with the camera.");
     }
 
     const admin = createAdminClient();
     const { data: plant } = await admin.from("plants").select("nickname, home_id").eq("id", plantId).maybeSingle();
-    if (!plant || plant.home_id !== sitter.homeId) throw new HttpError(404, "This plant doesn't exist anymore. It may have been deleted. Go back to your plants and refresh.");
+    if (!plant || plant.home_id !== sitter.homeId) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
 
     const path = `${plant.home_id}/${plantId}/${randomUUID()}.jpg`;
     const { error: upErr } = await admin.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: file.type });

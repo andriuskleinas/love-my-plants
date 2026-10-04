@@ -26,8 +26,8 @@ export default async function SitterPage({ params }: PageProps<"/sit/[token]">) 
     return (
       <main className="mx-auto w-full max-w-md flex-1 px-4 py-16 text-center">
         <p className="text-5xl">🔒</p>
-        <h1 className="mt-4 text-xl font-semibold">This link isn&apos;t valid</h1>
-        <p className="mt-2 text-muted">It may have been replaced with a new one. Ask the plant owner to send it again.</p>
+        <h1 className="mt-4 text-xl font-semibold">This link no longer works</h1>
+        <p className="mt-2 text-muted">Ask the plant owner to send it again.</p>
       </main>
     );
   }

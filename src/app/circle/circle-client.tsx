@@ -32,7 +32,7 @@ async function shareLink(url: string, text: string): Promise<string> {
     await navigator.clipboard.writeText(url);
     return "Link copied. Paste it into any chat.";
   } catch {
-    return "Your browser didn't allow copying automatically. Press and hold the link above to copy it.";
+    return "The link wasn't copied. Press and hold the link above to copy it.";
   }
 }
 
@@ -62,10 +62,7 @@ export function CircleMembers({ members }: { members: Member[] }) {
     setErrors((e) => ({ ...e, [id]: "" }));
     const res = await callApi<{ url?: string }>(`/api/circle/${id}`, { method });
     setBusy(null);
-    if (!res.ok) {
-      const what = method === "POST" ? "No new link was made." : method === "PATCH" ? "Their access wasn't ended." : "They weren't removed.";
-      return setErrors((e) => ({ ...e, [id]: `${what} ${res.error}` }));
-    }
+    if (!res.ok) return setErrors((e) => ({ ...e, [id]: res.error }));
     if (method === "POST" && res.data.url) setLinks((l) => ({ ...l, [id]: res.data.url! }));
     else router.refresh();
   }
@@ -156,7 +153,7 @@ export function InviteForm({
           };
     const res = await callApi<{ url: string }>("/api/circle", { method: "POST", json: body });
     setBusy(false);
-    if (!res.ok) return setError(`The invite wasn't created. ${res.error}`);
+    if (!res.ok) return setError(res.error);
     setLink({ url: res.data.url, name });
     setName("");
     router.refresh();

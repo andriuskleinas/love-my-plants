@@ -48,8 +48,8 @@ export function CheckinFlow({
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraProblem(
         window.isSecureContext
-          ? "This browser doesn't support the live camera."
-          : "The live camera only works on a secure (https) address, so it's off here.",
+          ? "The live camera isn't available in this browser. Use Take or choose a photo below."
+          : "The live camera isn't available here. Use Take or choose a photo below.",
       );
       return setCameraOk(false);
     }
@@ -68,12 +68,12 @@ export function CheckinFlow({
       const name = (e as DOMException).name;
       setCameraProblem(
         name === "NotAllowedError"
-          ? "Camera access is blocked for this site. Allow the camera in your browser's site settings, then reload."
+          ? "Camera access is blocked. Allow the camera in your browser settings, then reload."
           : name === "NotFoundError" || name === "OverconstrainedError"
-            ? "No camera was found on this device."
+            ? "No camera was found. Use Take or choose a photo below."
             : name === "NotReadableError"
-              ? "The camera is being used by another app. Close it and reload this page."
-              : "The live camera couldn't start.",
+              ? "The camera is in use by another app. Close that app and reload."
+              : "The live camera didn't start. Use Take or choose a photo below.",
       );
       setCameraOk(false);
     }

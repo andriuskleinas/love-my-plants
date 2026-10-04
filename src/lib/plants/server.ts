@@ -42,7 +42,7 @@ export async function getManagedHomeId(supabase: SupabaseClient, userId: string)
     .in("role", ["owner", "household"])
     .order("role"); // enum order: owner before household
   const homeId = data?.[0]?.home_id;
-  if (!homeId) throw new HttpError(403, "Your account isn't fully set up (no home was found for it). Please sign out and sign in again.");
+  if (!homeId) throw new HttpError(403, "Your account isn't fully set up. Sign out and sign in again.");
   return homeId;
 }
 
@@ -55,7 +55,7 @@ export async function consumeAiQuota(userId: string): Promise<void> {
   if (calls >= DAILY_AI_LIMIT) {
     throw new HttpError(
       429,
-      `You've used all ${DAILY_AI_LIMIT} photo checks for today. There's a daily limit to keep the AI costs fair.`,
+      `You've used all ${DAILY_AI_LIMIT} photo checks for today.`,
       nextUtcMidnight(),
     );
   }
@@ -73,7 +73,7 @@ export async function consumeChatQuota(userId: string): Promise<void> {
   if (used >= DAILY_CHAT_LIMIT) {
     throw new HttpError(
       429,
-      `You've sent ${DAILY_CHAT_LIMIT} messages to Plant Buddy today, which is the daily limit (it keeps the AI costs fair).`,
+      `You've reached today's limit of ${DAILY_CHAT_LIMIT} Plant Buddy messages.`,
       nextUtcMidnight(),
     );
   }

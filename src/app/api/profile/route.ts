@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = profileSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "That setting couldn't be saved because the value isn't valid. Please choose it again.");
+    if (!parsed.success) throw new HttpError(400, "This setting wasn't saved. Please choose it again.");
     const update: Record<string, string | number | null> = {};
     if (parsed.data.digestTime) update.digest_time = parsed.data.digestTime;
     if (parsed.data.displayName) update.display_name = parsed.data.displayName;

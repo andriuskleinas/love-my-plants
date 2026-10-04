@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await requireUserId(await createClient());
     const parsed = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/) }).safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "This invite link is incomplete or broken, maybe it was cut off when copied. Ask for a new link.");
+    if (!parsed.success) throw new HttpError(400, "This invite link is broken. Ask for a new link.");
     const problem = await acceptHouseholdInvite(parsed.data.token, userId);
     if (problem) throw new HttpError(400, problem);
     return NextResponse.json({ ok: true });

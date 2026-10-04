@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
   try {
     const userId = await requireUserId(await createClient());
     const parsed = bodySchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Type what you want to add to the list first.");
+    if (!parsed.success) throw new HttpError(400, "Nothing was typed. Type an item to add.");
     const homeId = await shoppingHomeFor(userId);
-    if (!homeId) throw new HttpError(403, "Your account isn't fully set up (no home was found for it). Please sign out and sign in again.");
+    if (!homeId) throw new HttpError(403, "Your account isn't fully set up. Sign out and sign in again.");
     if ("suggestions" in parsed.data) {
       const { suggestions } = await loadShopping(homeId);
       const added = await addShoppingItems(homeId, suggestions.map((s) => ({ item: s.item, reason: s.reason, plantId: s.plantId })), "plan");

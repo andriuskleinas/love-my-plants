@@ -14,7 +14,7 @@ export function JoinButton({ token }: { token: string }) {
     const res = await callApi("/api/circle/join", { method: "POST", json: { token } });
     if (!res.ok) {
       setBusy(false);
-      return setError(`You haven't joined yet. ${res.error}`);
+      return setError(res.error);
     }
     router.push("/");
     router.refresh();

@@ -56,7 +56,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
   if (!msg?.text) return;
   const chatId = String(msg.chat.id);
   if (msg.chat.type !== "private") {
-    await sendTelegramMessage(chatId, "I only work in private chats, so I can't help in groups. Open a private chat with me instead.");
+    await sendTelegramMessage(chatId, "I only work in private chats. Open a private chat with me.");
     return;
   }
 
@@ -108,7 +108,7 @@ async function handleStart(chatId: string, token?: string) {
       chatId,
       owner
         ? "✅ <b>Connected!</b> Your watering reminders will arrive here at your reminder time.\n\nSend /today to see what needs water now."
-        : "That code didn't work. It may have expired (codes last 15 minutes). In the app, tap <b>Connect Telegram</b> again for a new one.",
+        : "That code didn't work. In the app, tap <b>Connect Telegram</b> again for a new one.",
     );
     return;
   }
@@ -134,7 +134,7 @@ async function handleToday(chatId: string) {
   if (owner.memberId) {
     const sitter = await sitterForMember(owner.memberId, now);
     if (!sitter || sitter.status !== "active") {
-      await sendTelegramMessage(chatId, "Your plant-sitting dates haven't started yet or have already ended, so there's nothing to water. Thank you for helping! 🌿");
+      await sendTelegramMessage(chatId, "Plant-sitting isn't active today. Nothing to water. Thank you for helping! 🌿");
       return;
     }
     due = await dueWaterTasksForSitter(sitter, endOfLocalDay((await ownerSettings(sitter.ownerId)).timeZone, now));
@@ -164,7 +164,7 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
 
   const owner = await ownerForChat("telegram", chatId);
   if (!owner) {
-    await answerTelegramCallback(cb.id, "This chat isn't linked to an account anymore. Reconnect in the app: Settings → Connect Telegram.");
+    await answerTelegramCallback(cb.id, "This chat isn't connected. In the app, go to Settings → Connect Telegram.");
     return;
   }
   if (owner.memberId) return handleSitterCallback(cb, chatId, owner.memberId, answer);
@@ -178,8 +178,8 @@ async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>)
     .eq("id", answer.taskId)
     .maybeSingle();
   if (!task || !(await userCanAccessPlant(userId, task.plant_id))) {
-    await answerTelegramCallback(cb.id, "This reminder doesn't exist anymore. The plant may have been deleted, or the reminder was changed in the app.");
-    await editTelegramMessage(chatId, cb.message.message_id, "This reminder doesn't exist anymore. The plant may have been deleted, or the reminder was changed in the app.");
+    await answerTelegramCallback(cb.id, "This reminder no longer exists. Open the app to see current reminders.");
+    await editTelegramMessage(chatId, cb.message.message_id, "This reminder no longer exists. Open the app to see current reminders.");
     return;
   }
   const nickname = (Array.isArray(task.plant) ? task.plant[0] : task.plant)?.nickname ?? "Your plant";
@@ -215,7 +215,7 @@ async function handleSitterCallback(
   const now = new Date();
   const sitter = await sitterForMember(memberId, now);
   if (!sitter || sitter.status !== "active") {
-    await answerTelegramCallback(cb.id, "Plant-sitting hasn't started yet or has already ended, so this can't be marked. Check your dates with the plant owner.");
+    await answerTelegramCallback(cb.id, "Plant-sitting isn't active today. Check your dates with the plant owner.");
     return;
   }
   // Already handled (by the owner or an earlier tap)?
@@ -280,9 +280,9 @@ async function handleChat(chatId: string, text: string, photo?: TelegramPhotoSiz
         ? `${error.message} You can chat again from ${formatRetry(error.retryAt, new Date(), await userTimeZone(userId))}.`
         : error.message;
     } else if (photo && /photo|getFile|download/i.test(String((error as Error)?.message))) {
-      message = "I couldn't download your photo from Telegram (it may be too large or the connection dropped). Please send it again.";
+      message = "Your photo didn't come through. Please send it again.";
     } else {
-      message = "Something went wrong on my side, so I couldn't answer. Please send your message again in a minute.";
+      message = "I couldn't answer. Please send your message again in a minute.";
     }
     if (!(error instanceof HttpError)) console.error("buddy failed", error);
     await sendTelegramMessage(chatId, escapeHtml(message));
@@ -299,7 +299,7 @@ async function shoppingFor(chatId: string) {
 async function handleList(chatId: string) {
   const ctx = await shoppingFor(chatId);
   if (!ctx) {
-    await sendTelegramMessage(chatId, "I don't know whose list to show yet because this chat isn't connected. In the app, go to ⚙️ Settings → Connect Telegram.");
+    await sendTelegramMessage(chatId, "This chat isn't connected yet. In the app, go to ⚙️ Settings → Connect Telegram.");
     return;
   }
   const { items, suggestions } = await loadShopping(ctx.homeId);
@@ -314,7 +314,7 @@ async function handleShoppingCallback(
 ) {
   const ctx = await shoppingFor(chatId);
   if (!ctx) {
-    await answerTelegramCallback(cb.id, "This chat isn't linked to an account anymore. Reconnect in the app: Settings → Connect Telegram.");
+    await answerTelegramCallback(cb.id, "This chat isn't connected. In the app, go to Settings → Connect Telegram.");
     return;
   }
   if (action.kind === "bought") {

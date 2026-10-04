@@ -25,13 +25,13 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
     setResults(null);
     const res = await callApi<{ places: Place[] }>(`/api/location?q=${encodeURIComponent(query.trim())}`);
     setBusy(false);
-    if (!res.ok) return setMessage(`The search didn't work. ${res.error}`);
+    if (!res.ok) return setMessage(res.error);
     setResults(res.data.places);
-    if (!res.data.places.length) setMessage(`Nothing was found for "${query.trim()}". Try adding the city or country, e.g. "Gedimino 9, Vilnius".`);
+    if (!res.data.places.length) setMessage(`Nothing was found for "${query.trim()}". Add the city or country and try again.`);
   }
 
   function useDeviceLocation() {
-    if (!("geolocation" in navigator)) return setMessage("This browser can't share its location. Search by address instead.");
+    if (!("geolocation" in navigator)) return setMessage("Location isn't available in this browser. Search by address instead.");
     setBusy(true);
     setMessage(null);
     navigator.geolocation.getCurrentPosition(
@@ -42,7 +42,7 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
         });
         if (!res.ok) {
           setBusy(false);
-          return setMessage(`Your location couldn't be looked up. ${res.error}`);
+          return setMessage(res.error);
         }
         await choose(res.data.place);
       },
@@ -50,10 +50,10 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
         setBusy(false);
         setMessage(
           err.code === err.PERMISSION_DENIED
-            ? "Location access is blocked for this site, so we can't find you. Allow location in your browser's site settings, or search by address instead."
+            ? "Location access is blocked. Allow location in your browser settings, or search by address."
             : err.code === err.TIMEOUT
-              ? "Finding your location took too long (weak GPS or Wi-Fi signal). Try again, or search by address instead."
-              : "Your device couldn't work out where you are right now. Search by address instead.",
+              ? "Finding your location took too long. Try again, or search by address."
+              : "Your location couldn't be found. Search by address instead.",
         );
       },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 60 * 60 * 1000 },
@@ -67,7 +67,7 @@ export function LocationCard({ initialName }: { initialName: string | null }) {
       json: { location: { latitude: place.latitude, longitude: place.longitude, area: place.area } },
     });
     setBusy(false);
-    if (!res.ok) return setMessage(`Your location wasn't saved. ${res.error}`);
+    if (!res.ok) return setMessage(res.error);
     setName(place.area);
     setEditing(false);
     setResults(null);

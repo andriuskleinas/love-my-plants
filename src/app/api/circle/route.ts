@@ -21,17 +21,17 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const userId = await requireUserId(supabase);
     const parsed = inviteSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "The invite is missing something: add their name, and for a plant-sitter also the dates and at least one plant.");
+    if (!parsed.success) throw new HttpError(400, "The invite is missing details. Add their name, and for a plant-sitter also the dates and plants.");
     const homeId = await getManagedHomeId(supabase, userId);
     const token = newInviteToken();
     const data = parsed.data;
 
     let row: Record<string, unknown> = { home_id: homeId, display_name: data.name, role: data.role, invite_token_hash: hashToken(token) };
     if (data.role === "sitter") {
-      if (new Date(data.endsAt) <= new Date(data.startsAt)) throw new HttpError(400, "The plant-sitter's end date is before the start date. Please check the dates.");
+      if (new Date(data.endsAt) <= new Date(data.startsAt)) throw new HttpError(400, "The end date is before the start date. Check the dates.");
       // Only plants from this home.
       const { data: plants } = await supabase.from("plants").select("id").eq("home_id", homeId).in("id", data.plantIds);
-      if (!plants?.length) throw new HttpError(400, "Choose at least one plant for the plant-sitter to look after.");
+      if (!plants?.length) throw new HttpError(400, "No plants were chosen. Choose at least one plant.");
       row = { ...row, starts_at: data.startsAt, ends_at: data.endsAt, plant_scope: plants.map((p) => p.id) };
     }
 

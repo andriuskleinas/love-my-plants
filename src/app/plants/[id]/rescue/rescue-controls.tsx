@@ -26,7 +26,7 @@ export function RescueSteps({
     const res = await callApi(`/api/plants/${plantId}/rescue`, { method: "PATCH", json: { stepIndex: index, done: next } });
     if (!res.ok) {
       setDone(before);
-      setError(`That tick wasn't saved. ${res.error}`);
+      setError(res.error);
     }
   }
 
@@ -75,7 +75,7 @@ export function EndRescue({ plantId, nickname }: { plantId: string; nickname: st
     setError(null);
     const res = await callApi(`/api/plants/${plantId}/rescue`, { method: "POST", json: { outcome } });
     setBusy(false);
-    if (!res.ok) return setError(`The rescue wasn't ended. ${res.error}`);
+    if (!res.ok) return setError(res.error);
     router.push(outcome === "lost" ? "/" : `/plants/${plantId}`);
     router.refresh();
   }

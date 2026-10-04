@@ -41,7 +41,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       .maybeSingle();
     const action = row ? assessmentSchema.safeParse(row.raw).data?.actions[index] : undefined;
     const plant = Array.isArray(row?.plant) ? row.plant[0] : row?.plant;
-    if (!action || !plant) throw new HttpError(404, "This step is from an older check and can't be ticked anymore. Refresh the page to see the current steps.");
+    if (!action || !plant) throw new HttpError(404, "This step is no longer available. Refresh the page.");
 
     const { error } = await supabase.from("care_events").upsert(
       {

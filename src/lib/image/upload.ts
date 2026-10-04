@@ -25,10 +25,10 @@ export async function uploadPlantPhoto(supabase: SupabaseClient, path: string, b
   const status = Number((error as { statusCode?: string | number }).statusCode ?? 0);
   if (!navigator.onLine) throw new Error(MESSAGES.offline);
   if (status === 413 || /too large|maximum allowed size/i.test(error.message ?? "")) {
-    throw new Error("That photo is too large to upload (over 5 MB even after shrinking). Please take a new photo with the camera.");
+    throw new Error("The photo is too large. Take a new photo with the camera.");
   }
   if (status === 401 || status === 403 || /jwt|unauthorized|row-level/i.test(error.message ?? "")) {
-    throw new Error("The photo couldn't be saved because you're signed out or don't have access to this plant anymore. Please sign in again.");
+    throw new Error("The photo wasn't saved. Sign in again and retry.");
   }
   throw new Error(MESSAGES.uploadFailed);
 }

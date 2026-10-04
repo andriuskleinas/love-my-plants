@@ -50,7 +50,7 @@ export async function answerWaterTask(
     .eq("id", taskId)
     .maybeSingle();
   const plant = (Array.isArray(task?.plant) ? task.plant[0] : task?.plant) as PlantForWatering | undefined;
-  if (!task || task.type !== "water" || !plant) throw new HttpError(404, "This reminder was already answered or removed. Refresh to see the current one.");
+  if (!task || task.type !== "water" || !plant) throw new HttpError(404, "This reminder was already answered. Refresh to see the current one.");
 
   const [{ data: species }, { data: profile }, memberId] = await Promise.all([
     plant.species_id

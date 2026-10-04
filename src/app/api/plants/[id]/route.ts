@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/plants
     const supabase = await createClient();
     await requireUserId(supabase);
     const parsed = updateSchema.safeParse(await request.json());
-    if (!parsed.success) throw new HttpError(400, "Your plant needs a name (up to 40 characters) before it can be saved.");
+    if (!parsed.success) throw new HttpError(400, "The plant has no name. Give it a name of up to 40 characters.");
 
     const update: Record<string, string | null> = {};
     if (parsed.data.nickname) update.nickname = parsed.data.nickname;
@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/plants
 
     const { data, error } = await supabase.from("plants").update(update).eq("id", id).select("id");
     if (error) throw error;
-    if (!data.length) throw new HttpError(404, "This plant doesn't exist anymore. It may have been deleted. Go back to your plants and refresh.");
+    if (!data.length) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);
@@ -44,7 +44,7 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/plan
     const supabase = await createClient();
     await requireUserId(supabase);
     const { data: plant } = await supabase.from("plants").select("home_id").eq("id", id).maybeSingle();
-    if (!plant) throw new HttpError(404, "This plant doesn't exist anymore. It may have been deleted. Go back to your plants and refresh.");
+    if (!plant) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
 
     // Remove photo files first: listing them needs the plant row to still exist.
     const prefix = `${plant.home_id}/${id}`;
@@ -53,7 +53,7 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext<"/api/plan
 
     const { data, error } = await supabase.from("plants").delete().eq("id", id).select("id");
     if (error) throw error;
-    if (!data.length) throw new HttpError(403, "Only household members can delete plants. Plant-sitters can water and send photos, but not change plants.");
+    if (!data.length) throw new HttpError(403, "You can't delete this plant. Ask a household member to do it.");
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

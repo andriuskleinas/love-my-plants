@@ -19,7 +19,7 @@ export function RepottedButton({ plantId, currentCm, recommendedCm }: { plantId:
     setError(null);
     const res = await callApi(`/api/plants/${plantId}/repotted`, { method: "POST", json: { potDiameterCm: size } });
     setBusy(false);
-    if (!res.ok) return setError(`The repot wasn't saved. ${res.error}`);
+    if (!res.ok) return setError(res.error);
     setOpen(false);
     router.refresh();
   }

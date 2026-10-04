@@ -155,11 +155,11 @@ export async function askBuddy(input: BuddyInput): Promise<BuddyReply> {
   if (response.stop_reason === "refusal") {
     throw new AssessmentError(
       "refusal",
-      "I can't answer that one because the AI's safety filter declined it. Try asking about your plants in a different way.",
+      "I can't answer that one. Try asking in a different way.",
     );
   }
   if (!response.parsed_output) {
-    throw new AssessmentError(`unparsed (${response.stop_reason})`, "My answer didn't come through properly. Please send your message again.");
+    throw new AssessmentError(`unparsed (${response.stop_reason})`, "My answer didn't come through. Please send your message again.");
   }
 
   // Keep the history as plain text (photos are summarised by the reply itself).

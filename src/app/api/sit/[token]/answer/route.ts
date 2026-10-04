@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/sit/[to
   try {
     const { token } = await ctx.params;
     const sitter = await sitterForToken(token);
-    if (!sitter) throw new HttpError(404, "This plant-sitting link doesn't work anymore. The owner may have replaced it with a new one. Ask them to send the link again.");
+    if (!sitter) throw new HttpError(404, "This plant-sitting link no longer works. Ask the plant owner to send it again.");
     const parsed = bodySchema.safeParse(await request.json());
     if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const result = await answerAsSitter(sitter, parsed.data.taskId, parsed.data.outcome);

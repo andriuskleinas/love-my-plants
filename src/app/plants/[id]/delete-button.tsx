@@ -14,7 +14,7 @@ export function DeletePlantButton({ id, nickname }: { id: string; nickname: stri
     setBusy(true);
     const res = await callApi(`/api/plants/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      setError(`${nickname} wasn't deleted. ${res.error}`);
+      setError(res.error);
       setBusy(false);
       return;
     }

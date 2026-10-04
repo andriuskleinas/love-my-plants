@@ -19,8 +19,8 @@ describe("retry times", () => {
 describe("API error wording", () => {
   it("adds the retry time to limit messages", () => {
     const retryAt = new Date(Date.now() + 3 * 3600_000).toISOString();
-    const msg = describeError(429, { error: "You've used all 20 plant checks for today.", retryAt });
-    expect(msg).toMatch(/^You've used all 20 plant checks for today\. You can try again from \d\d:\d\d \(in about 3 hours\)\.$/);
+    const msg = describeError(429, { error: "You've used all 20 photo checks for today.", retryAt });
+    expect(msg).toMatch(/^You've used all 20 photo checks for today\. You can try again from \d\d:\d\d \(in about 3 hours\)\.$/);
   });
 
   it("explains failures that have no server message", () => {
@@ -32,6 +32,8 @@ describe("API error wording", () => {
   });
 
   it("keeps the server's explanation otherwise", () => {
-    expect(describeError(403, { error: "Only household members can delete plants." })).toBe("Only household members can delete plants.");
+    expect(describeError(403, { error: "You can't delete this plant. Ask a household member to do it." })).toBe(
+      "You can't delete this plant. Ask a household member to do it.",
+    );
   });
 });

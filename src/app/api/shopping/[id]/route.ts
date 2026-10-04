@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, ctx: RouteContext<"/api/shoppi
     const parsed = bodySchema.safeParse(await request.json());
     if (!parsed.success) throw new HttpError(400, MESSAGES.badRequest);
     const homeId = await shoppingHomeFor(userId);
-    if (!homeId || !(await setItemStatus(homeId, id, parsed.data.status))) throw new HttpError(404, "This item isn't on the list anymore. It may have been removed on another device. Refresh the page.");
+    if (!homeId || !(await setItemStatus(homeId, id, parsed.data.status))) throw new HttpError(404, "This item is no longer on the list. Refresh the page.");
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

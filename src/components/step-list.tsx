@@ -26,7 +26,7 @@ export function StepList({ plantId, assessmentId, items }: { plantId: string; as
     const res = await callApi(`/api/plants/${plantId}/steps`, { method: "POST", json: { assessmentId, index, done: next } });
     if (!res.ok) {
       setDone(done); // roll back
-      setError(`That tick wasn't saved. ${res.error}`);
+      setError(res.error);
     }
   }
 

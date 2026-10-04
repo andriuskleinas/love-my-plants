@@ -43,7 +43,7 @@ export function TelegramCard({
     setMessage(null);
     const res = await callApi<{ url: string; code: string; bot: string }>(endpoint, { method: "POST" });
     setBusy(false);
-    if (!res.ok) return setMessage(`Telegram couldn't be connected. ${res.error}`);
+    if (!res.ok) return setMessage(res.error);
     const json = res.data;
 
     setLink(json);
@@ -65,7 +65,7 @@ export function TelegramCard({
       } else if (tries > 100) {
         clearInterval(polling.current!);
         setState("off");
-        setMessage("The connect code expired after 15 minutes without being used. Tap Connect Telegram to get a new one.");
+        setMessage("The connect code expired. Tap Connect Telegram to get a new one.");
       }
     }, 3000);
   }
@@ -74,7 +74,7 @@ export function TelegramCard({
     setBusy(true);
     const res = await callApi("/api/messenger/link", { method: "DELETE" });
     setBusy(false);
-    if (!res.ok) return setMessage(`Telegram is still connected. ${res.error}`);
+    if (!res.ok) return setMessage(res.error);
     setState("off");
     setMessage(null);
   }
@@ -82,7 +82,7 @@ export function TelegramCard({
   async function sendTest() {
     setBusy(true);
     const res = await callApi("/api/messenger/test", { method: "POST" });
-    setMessage(res.ok ? "Sent! Check Telegram." : `The test wasn't sent. ${res.error}`);
+    setMessage(res.ok ? "Sent! Check Telegram." : res.error);
     setBusy(false);
   }
 

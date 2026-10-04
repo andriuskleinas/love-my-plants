@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     );
     const updated = results.filter((r) => r.status === "fulfilled").length;
     if (!updated) {
-      throw new HttpError(409, "These reminders were already answered or removed, so there was nothing to save.");
+      throw new HttpError(409, "These reminders were already answered. Nothing else to do.");
     }
     return NextResponse.json({ updated });
   } catch (error) {

@@ -69,8 +69,8 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
       const reason = e instanceof Error && e.message ? e.message : "";
       setMessage(
         reason
-          ? `Reminders weren't turned on. ${reason}`
-          : "Reminders weren't turned on because the browser refused to set up notifications (this can happen in private windows). Try a normal window.",
+          ? reason
+          : "Reminders weren't turned on. Try again in a normal (not private) browser window.",
       );
     } finally {
       setBusy(false);
@@ -84,7 +84,7 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
     if (sub) {
       const res = await callApi("/api/push/subscribe", { method: "DELETE", json: { endpoint: sub.endpoint } });
       if (!res.ok) {
-        setMessage(`Reminders are still on. ${res.error}`);
+        setMessage(res.error);
         setBusy(false);
         return;
       }
@@ -107,7 +107,7 @@ export function NotificationsCard({ compact = false }: { compact?: boolean }) {
     const res = await callApi("/api/push/test", { method: "POST" });
     if (!res.ok) {
       navigator.serviceWorker.removeEventListener("message", onMessage);
-      setMessage(`The test wasn't sent. ${res.error}`);
+      setMessage(res.error);
       setBusy(false);
       return;
     }

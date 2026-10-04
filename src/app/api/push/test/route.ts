@@ -13,7 +13,7 @@ export async function POST() {
       url: "/",
       tag: "test",
     });
-    if (!sent) throw new HttpError(404, "This device isn't set up for notifications yet, so there's nowhere to send the test. Tap Turn on reminders first.");
+    if (!sent) throw new HttpError(404, "Notifications aren't turned on for this device. Tap Turn on reminders first.");
     return NextResponse.json({ sent });
   } catch (error) {
     return errorResponse(error);

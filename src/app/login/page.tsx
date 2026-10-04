@@ -53,7 +53,7 @@ function LoginForm() {
       <h1 className="text-2xl font-semibold">Sign in</h1>
       <p className="mt-1 text-muted">No password. We&apos;ll email you a link.</p>
       {next !== "/" && !error && (
-        <p className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">You need to be signed in to open that page. Sign in and you&apos;ll be taken straight there.</p>
+        <p className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">That page needs you to be signed in. Sign in below and you&apos;ll go straight there.</p>
       )}
       <label htmlFor="email" className="mt-6 block text-sm font-medium">
         Email

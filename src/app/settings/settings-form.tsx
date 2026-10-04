@@ -24,7 +24,7 @@ export function SettingsForm(props: {
   async function save(update: { digestTime?: string; displayName?: string }) {
     setSaved(null);
     const res = await callApi("/api/profile", { method: "PATCH", json: update });
-    setSaved(res.ok ? "Saved" : `Not saved. ${res.error}`);
+    setSaved(res.ok ? "Saved" : res.error);
   }
 
   async function signOut() {

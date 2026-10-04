@@ -46,17 +46,16 @@ self.addEventListener("notificationclick", (event) => {
       })
         .then((res) => {
           if (res.ok) return;
-          const why =
+          return showFailure(
             res.status === 409
-              ? "it was already answered (maybe by someone else)"
+              ? "This reminder was already answered. Nothing else to do."
               : res.status === 401
-              ? "you're signed out of the app"
-              : res.status === 429
-                ? "too many requests were made"
-                : "of a problem on our side";
-          return showFailure(`Your answer wasn't saved because ${why}. Open the app to answer there.`, url);
+                ? "Your answer wasn't saved. Sign in to the app and answer there."
+                : "Your answer wasn't saved. Open the app to answer there.",
+            url,
+          );
         })
-        .catch(() => showFailure("Your answer wasn't saved because your phone was offline. Open the app to answer there.", url)),
+        .catch(() => showFailure("Your answer wasn't saved. Open the app to answer there when you're back online.", url)),
     );
     return;
   }

@@ -52,7 +52,7 @@ export function WaterCard({
     });
     setBusy(false);
     if (!res.ok) {
-      setError(`Your answer wasn't saved. ${res.error}`);
+      setError(res.error);
       return;
     }
     const json = res.data;

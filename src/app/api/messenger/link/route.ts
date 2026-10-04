@@ -20,7 +20,7 @@ export async function GET() {
 export async function POST() {
   try {
     const userId = await requireUserId(await createClient());
-    if (!telegramConfigured()) throw new HttpError(503, "Telegram reminders aren't available right now because the bot isn't configured. Use browser notifications below instead.");
+    if (!telegramConfigured()) throw new HttpError(503, "Telegram reminders aren't available right now. Use browser notifications below instead.");
     const token = await createLinkToken(userId);
     const bot = await getBotUsername();
     return NextResponse.json({ url: `https://t.me/${bot}?start=${token}`, code: formatLinkCode(token), bot });

@@ -18,7 +18,7 @@ export function SitterPhotoButton({ token, plantId, nickname }: { token: string;
       form.set("photo", new File([await readPhoto(file)], "photo.jpg", { type: "image/jpeg" }));
       const res = await callApi(`/api/sit/${token}/photo`, { method: "POST", body: form });
       if (res.ok) return setState("sent");
-      setError(`The photo wasn't sent. ${res.error}`);
+      setError(res.error);
       setState("error");
     } catch (e) {
       setError((e as Error).message);

@@ -18,7 +18,7 @@ export function ItemList({ items }: { items: Item[] }) {
     const res = await callApi(`/api/shopping/${id}`, { method: "PATCH", json: { status } });
     if (!res.ok) {
       setState(before);
-      setError(`That change wasn't saved. ${res.error}`);
+      setError(res.error);
     } else if (status === "dismissed") router.refresh();
   }
 
@@ -74,7 +74,7 @@ export function AddItem() {
     setError(null);
     const res = await callApi("/api/shopping", { method: "POST", json: { item } });
     setBusy(false);
-    if (!res.ok) return setError(`"${item.trim()}" wasn't added. ${res.error}`);
+    if (!res.ok) return setError(res.error);
     setItem("");
     router.refresh();
   }
@@ -119,7 +119,7 @@ export function AddSuggestions() {
         setError(null);
         const res = await callApi("/api/shopping", { method: "POST", json: { suggestions: true } });
         setBusy(false);
-        if (!res.ok) return setError(`The suggestions weren't added. ${res.error}`);
+        if (!res.ok) return setError(res.error);
         router.refresh();
       }}
       className="mt-3 rounded-full bg-leaf px-4 py-2 font-medium text-background disabled:opacity-50"
