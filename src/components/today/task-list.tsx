@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronIcon } from "@/components/icons";
+import { useToast } from "@/components/toast";
 import { useWaterAnswer } from "@/components/water-card";
 import { callApi } from "@/lib/api-client";
 import type { TodayTask } from "@/lib/care/today";
@@ -39,7 +40,7 @@ export function TaskList({ tasks }: { tasks: TodayTask[] }) {
   return (
     <ul className="space-y-2">
       {groupSteps(tasks).map((item) => (
-        <li key={item.key}>
+        <li key={item.key} className="empty:hidden">
           {"steps" in item ? (
             <StepGroup steps={item.steps} />
           ) : item.task.kind === "water" ? (
@@ -94,9 +95,10 @@ function LinkRow({ task }: { task: Extract<TodayTask, { kind: "rescue" | "checki
 }
 
 function WaterRow({ task }: { task: Extract<TodayTask, { kind: "water" }> }) {
-  const { answer, busy, result, error } = useWaterAnswer(task.taskId);
+  const { answer, busy, result, error, hidden } = useWaterAnswer(task.taskId, task.nickname);
   const [more, setMore] = useState(false);
   const due = dueLabel(new Date(task.dueAt));
+  if (hidden) return null;
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3">
@@ -170,7 +172,7 @@ function StepGroup({ steps }: { steps: StepTask[] }) {
               {steps.length} from the last health check
             </span>
           </p>
-          <Link href={`/plants/${first.plantId}`} className="mt-1 block font-medium hover:underline">
+          <Link href={`/plants/${first.plantId}`} className="mt-0.5 block py-0.5 font-medium hover:underline">
             {first.nickname}
           </Link>
         </div>
@@ -186,17 +188,50 @@ function StepGroup({ steps }: { steps: StepTask[] }) {
 
 function StepLine({ task }: { task: StepTask }) {
   const router = useRouter();
+  const toast = useToast();
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancel = useRef<(() => void) | null>(null);
 
-  async function toggle() {
-    const next = !done;
-    setDone(next);
-    setError(null);
-    const res = await callApi(`/api/plants/${task.plantId}/steps`, {
+  const save = (next: boolean, keepalive = false) =>
+    callApi(`/api/plants/${task.plantId}/steps`, {
       method: "POST",
       json: { assessmentId: task.assessmentId, index: task.index, done: next },
+      keepalive,
     });
+
+  async function toggle() {
+    setError(null);
+    // Tapping again before the tick is saved is the same as Undo.
+    if (cancel.current) {
+      cancel.current();
+      return;
+    }
+    const next = !done;
+    setDone(next);
+    if (toast && next) {
+      cancel.current = toast.defer({
+        message: `Done: ${task.step}`,
+        run: async () => {
+          cancel.current = null;
+          const res = await save(true, true);
+          if (!res.ok) return res;
+          // The tick moves into today's progress.
+          router.refresh();
+          return { ok: true };
+        },
+        onUndo: () => {
+          cancel.current = null;
+          setDone(false);
+        },
+        onError: (message) => {
+          setDone(false);
+          setError(message);
+        },
+      });
+      return;
+    }
+    const res = await save(next);
     if (!res.ok) {
       setDone(!next); // roll back
       setError(res.error);

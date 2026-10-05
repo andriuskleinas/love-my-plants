@@ -50,7 +50,7 @@ export default async function CirclePage({ searchParams }: PageProps<"/circle">)
   }));
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl">
       <PageHeader title="Care Circle" back={{ href: "/more", label: "More" }} />
       <p className="mt-1 text-muted">Everyone who helps look after your plants. Whoever waters taps Done, and the others don&apos;t get that reminder.</p>
 

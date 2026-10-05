@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/components/toast";
 import { callApi } from "@/lib/api-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,32 +28,68 @@ const RESULT_TEXT: Record<WaterOutcome, string> = {
   snooze: "OK, we'll remind you tomorrow.",
 };
 
-/** Sends a watering answer and keeps the result to show; Today and the plant page share it. */
-export function useWaterAnswer(taskId: string, answerEndpoint?: string) {
+/** What the Undo toast says while the answer waits to be saved. */
+const UNDO_TEXT: Record<WaterOutcome, (name: string) => string> = {
+  dry: (name) => `Watered ${name} 💧`,
+  dry_drooping: (name) => `Watered ${name} 💧`,
+  damp: (name) => `Skipped ${name}: soil still damp`,
+  snooze: (name) => `${name}: reminder moved to tomorrow`,
+};
+
+/**
+ * Sends a watering answer; Today and the plant page share it. In the signed-in app the answer
+ * waits behind an Undo toast and the card hides meanwhile; elsewhere it's saved straight away.
+ */
+export function useWaterAnswer(taskId: string, nickname: string, answerEndpoint?: string) {
   const router = useRouter();
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(false);
 
-  async function answer(outcome: WaterOutcome) {
-    setBusy(true);
-    setError(null);
+  async function send(outcome: WaterOutcome, keepalive = false) {
     const res = await callApi<{ nextDueAt: string }>(answerEndpoint ?? `/api/tasks/${taskId}/answer`, {
       method: "POST",
       json: answerEndpoint ? { taskId, outcome } : { outcome },
+      keepalive,
     });
+    if (!res.ok) return res;
+    const next = outcome === "dry" || outcome === "dry_drooping" ? ` Next time: ${dueLabel(new Date(res.data.nextDueAt))}.` : "";
+    return { ok: true as const, message: RESULT_TEXT[outcome] + next };
+  }
+
+  async function answer(outcome: WaterOutcome) {
+    setError(null);
+    if (toast) {
+      setHidden(true);
+      toast.defer({
+        message: UNDO_TEXT[outcome](nickname),
+        run: async () => {
+          const res = await send(outcome, true);
+          if (res.ok) router.refresh();
+          return res;
+        },
+        onUndo: () => setHidden(false),
+        onError: (message) => {
+          setHidden(false);
+          setError(message);
+        },
+      });
+      return;
+    }
+    setBusy(true);
+    const res = await send(outcome);
     setBusy(false);
     if (!res.ok) {
       setError(res.error);
       return;
     }
-    const json = res.data;
-    const next = outcome === "dry" || outcome === "dry_drooping" ? ` Next time: ${dueLabel(new Date(json.nextDueAt))}.` : "";
-    setResult(RESULT_TEXT[outcome] + next);
+    setResult(res.message);
     setTimeout(() => router.refresh(), 2500);
   }
 
-  return { answer, busy, result, error };
+  return { answer, busy, result, error, hidden };
 }
 
 export function WaterCard({
@@ -66,7 +103,8 @@ export function WaterCard({
   showPlantLink = true,
   answerEndpoint,
 }: WaterCardProps) {
-  const { answer, busy, result, error } = useWaterAnswer(taskId, answerEndpoint);
+  const { answer, busy, result, error, hidden } = useWaterAnswer(taskId, nickname, answerEndpoint);
+  if (hidden) return null;
 
   const due = dueLabel(new Date(dueAt));
   const overdue = due.endsWith("overdue");

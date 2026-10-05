@@ -196,7 +196,7 @@ function Today({
 }) {
   const total = done + tasks.length;
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))]">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl pt-[max(1.5rem,env(safe-area-inset-top))]">
       <header className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm text-muted">
@@ -320,7 +320,7 @@ function PlantStrip({ plants }: { plants: PlantChip[] }) {
         <h2 id="plants-heading" className="text-lg font-semibold">
           Your plants
         </h2>
-        <Link href="/plants" className="text-sm font-medium text-leaf">
+        <Link href="/plants" className="-my-2 py-2 text-sm font-medium text-leaf">
           See all
         </Link>
       </div>

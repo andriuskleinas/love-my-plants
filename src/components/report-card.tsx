@@ -3,6 +3,8 @@ import { LOW_CONFIDENCE, SCORE_KEYS, SCORE_LABELS, type Assessment } from "@/lib
 type Props = Pick<Assessment, "scores" | "issues" | "actions"> & {
   /** Replaces the read-only step list, e.g. with tickable steps. */
   today?: React.ReactNode;
+  /** The plant page shows overall health in its header instead. */
+  showHealth?: boolean;
 };
 
 export function scoreTone(value: number) {
@@ -48,19 +50,21 @@ export function TodaySteps({ actions }: Pick<Assessment, "actions">) {
   );
 }
 
-export function ReportCard({ scores, issues, actions, today }: Props) {
+export function ReportCard({ scores, issues, actions, today, showHealth = true }: Props) {
   const health = scores.health;
   const rest = SCORE_KEYS.filter((k) => k !== "health");
 
   return (
     <div className="space-y-8">
-      <section className="flex items-center gap-4">
-        <HealthBadge value={health.value} size="lg" />
-        <div>
-          <p className="text-sm text-muted">Overall health · {scoreTone(health.value).label}</p>
-          <p className="mt-1 font-medium">{health.why}</p>
-        </div>
-      </section>
+      {showHealth && (
+        <section className="flex items-center gap-4">
+          <HealthBadge value={health.value} size="lg" />
+          <div>
+            <p className="text-sm text-muted">Overall health · {scoreTone(health.value).label}</p>
+            <p className="mt-1 font-medium">{health.why}</p>
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-lg font-semibold">Today</h2>

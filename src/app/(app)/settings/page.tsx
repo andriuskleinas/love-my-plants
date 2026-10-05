@@ -21,7 +21,7 @@ export default async function SettingsPage() {
     .maybeSingle();
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl">
       <PageHeader title="Settings" back={{ href: "/more", label: "More" }} />
 
       <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-muted">Reminders</h2>

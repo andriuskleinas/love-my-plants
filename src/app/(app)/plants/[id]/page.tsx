@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HealthTrend } from "@/components/health-trend";
-import { ReportCard } from "@/components/report-card";
+import { BackIcon, TrendIcon } from "@/components/icons";
+import { HealthBadge, ReportCard, scoreTone } from "@/components/report-card";
 import { StepList } from "@/components/step-list";
 import { Timelapse, type Frame } from "@/components/timelapse";
 import { WaterCard } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
-import { daysSince, needsCheckin } from "@/lib/care/plan";
+import { needsCheckin } from "@/lib/care/plan";
 import { planLength, rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { endOfLocalDay } from "@/lib/care/schedule";
@@ -14,8 +15,10 @@ import type { Hemisphere } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
-import { DeletePlantButton } from "./delete-button";
+import { healthTrend } from "@/lib/plants/collection";
 import { PlanSection } from "./plan-section";
+import { PlantActions } from "./plant-actions";
+import { SectionNav, type Section } from "./section-nav";
 
 export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const { id } = await params;
@@ -112,20 +115,37 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     waterTask && new Date(waterTask.due_at).getTime() < endOfLocalDay(profile?.timezone ?? "UTC", new Date()).getTime();
   const ticked = new Set((ticks ?? []).map((t) => t.action_index));
 
+  const tz = profile?.timezone ?? "UTC";
+  const health = assessment?.success ? assessment.data.scores.health : null;
+  const previousHealth = history && history.length > 1 ? history.at(-2)!.health : null;
+  const trend = health ? healthTrend(health.value, previousHealth) : null;
+  const tone = health ? scoreTone(health.value) : null;
+  const checkedOn = latest
+    ? new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "long" }).format(new Date(latest.created_at))
+    : null;
+  const hasPlan = milestones.some((m) => m.type === "repot" || m.type === "fertilize_season");
+  const sections: Section[] = [
+    { id: "today", label: "Today" },
+    ...(history?.length ? [{ id: "progress", label: "Progress" }] : []),
+    ...(hasPlan ? [{ id: "plan", label: "Plan" }] : []),
+    ...(care ? [{ id: "care", label: "Care sheet" }] : []),
+  ];
+
   return (
-    <main className="mx-auto w-full max-w-md flex-1 pb-16">
+    <main className="mx-auto w-full max-w-md flex-1 lg:max-w-2xl lg:pt-6">
       <div className="relative">
         {coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={coverUrl} alt={plant.nickname} className="aspect-[4/3] w-full object-cover" />
+          <img src={coverUrl} alt={plant.nickname} className="aspect-[4/3] w-full object-cover lg:aspect-[16/9] lg:rounded-3xl" />
         ) : (
-          <div className="flex aspect-[4/3] w-full items-center justify-center bg-leaf-soft text-6xl">🪴</div>
+          <div className="flex aspect-[4/3] w-full items-center justify-center bg-leaf-soft text-6xl lg:aspect-[16/9] lg:rounded-3xl">🪴</div>
         )}
         <Link
           href="/plants"
-          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] rounded-full bg-background/90 px-3 py-1.5 text-sm"
+          aria-label="Back to Plants"
+          className="absolute left-4 top-[max(1rem,env(safe-area-inset-top))] flex h-10 w-10 items-center justify-center rounded-full bg-background/90 shadow-sm"
         >
-          ← Plants
+          <BackIcon size={22} />
         </Link>
       </div>
 
@@ -136,68 +156,76 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
         </h1>
         {plant.species_name && <p className="italic text-muted">{plant.species_name}</p>}
 
-        {rescue ? (
-          <Link
-            href={`/plants/${plant.id}/rescue`}
-            className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
-          >
-            <span>
-              🚨 <b>Rescue day {Math.min(rescueToday, planLength(rescueSteps))} of {planLength(rescueSteps)}</b>
-              <span className="text-muted"> · {rescueOpen ? `${rescueOpen} step${rescueOpen > 1 ? "s" : ""} today` : "nothing to do today"}</span>
-            </span>
-            <span aria-hidden>→</span>
-          </Link>
-        ) : plant.status === "er" ? (
-          <Link
-            href={`/plants/${plant.id}/rescue`}
-            className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
-          >
-            <span>
-              🚨 <b>{plant.nickname} needs help.</b> <span className="text-muted">Start a rescue plan</span>
-            </span>
-            <span aria-hidden>→</span>
-          </Link>
-        ) : null}
-
-        <Link
-          href={`/plants/${plant.id}/checkin`}
-          className={`mt-4 flex items-center justify-between rounded-2xl border p-3 text-sm ${
-            checkinDue ? "border-leaf bg-leaf-soft" : "border-border bg-surface"
-          }`}
-        >
-          <span>
-            📸 <b>{checkinDue ? "Weekly check-in due" : "New check-in"}</b>
-            {lastPhotoAt && <span className="text-muted"> · last photo {daysSince(lastPhotoAt, new Date())} days ago</span>}
-          </span>
-          <span aria-hidden>→</span>
-        </Link>
-
-        {waterTask && waterDueToday && (
-          <div className="mt-4">
-            <WaterCard
-              taskId={waterTask.id}
-              plantId={plant.id}
-              nickname={plant.nickname}
-              title={waterTask.title}
-              detail={waterTask.detail}
-              dueAt={waterTask.due_at}
-              showPlantLink={false}
-            />
+        {health && tone && (
+          <div className="mt-4 rounded-2xl border border-border bg-surface p-4">
+            <div className="flex items-center gap-3">
+              <HealthBadge value={health.value} />
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-x-2 font-semibold">
+                  <span className={tone.text}>{tone.label}</span>
+                  {trend && previousHealth != null && (
+                    <span className="flex items-center gap-1 text-sm font-normal text-muted">
+                      <TrendIcon trend={trend} size={16} strokeWidth={2.2} className={tone.text} />
+                      {trend === "steady" ? "about the same as last time" : `${trend} from ${previousHealth}`}
+                    </span>
+                  )}
+                </p>
+                {checkedOn && <p className="text-sm text-muted">Checked {checkedOn}</p>}
+              </div>
+            </div>
+            <p className="mt-3 text-sm">{health.why}</p>
           </div>
         )}
-        {waterTask && !waterDueToday && (
-          <p className="mt-4 rounded-2xl bg-leaf-soft p-3 text-sm">
-            💧 Next watering <b>{dueLabel(new Date(waterTask.due_at))}</b>: {waterTask.title.toLowerCase()}
-          </p>
-        )}
 
-        <div className="mt-8">
-          {assessment?.success ? (
-            <>
-              <p className="mb-4 text-xs text-muted">
-                Checked {new Date(latest!.created_at).toLocaleDateString(undefined, { day: "numeric", month: "long" })}
-              </p>
+        <SectionNav sections={sections} />
+
+        <section id="today" className="scroll-mt-20" aria-label="Today">
+          {rescue ? (
+            <Link
+              href={`/plants/${plant.id}/rescue`}
+              className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
+            >
+              <span>
+                🚨 <b>Rescue day {Math.min(rescueToday, planLength(rescueSteps))} of {planLength(rescueSteps)}</b>
+                <span className="text-muted"> · {rescueOpen ? `${rescueOpen} step${rescueOpen > 1 ? "s" : ""} today` : "nothing to do today"}</span>
+              </span>
+              <span aria-hidden>→</span>
+            </Link>
+          ) : plant.status === "er" ? (
+            <Link
+              href={`/plants/${plant.id}/rescue`}
+              className="mt-4 flex items-center justify-between rounded-2xl border border-terracotta bg-terracotta/10 p-3 text-sm"
+            >
+              <span>
+                🚨 <b>{plant.nickname} needs help.</b> <span className="text-muted">Start a rescue plan</span>
+              </span>
+              <span aria-hidden>→</span>
+            </Link>
+          ) : null}
+
+          {waterTask && waterDueToday && (
+            <div id="water" className="mt-4 scroll-mt-24">
+              <WaterCard
+                taskId={waterTask.id}
+                plantId={plant.id}
+                nickname={plant.nickname}
+                title={waterTask.title}
+                detail={waterTask.detail}
+                dueAt={waterTask.due_at}
+                showPlantLink={false}
+              />
+            </div>
+          )}
+          {waterTask && !waterDueToday && (
+            <p className="mt-4 rounded-2xl bg-leaf-soft p-3 text-sm">
+              💧 Next watering <b>{dueLabel(new Date(waterTask.due_at))}</b>: {waterTask.title.toLowerCase()}
+            </p>
+          )}
+
+          <div className="mt-6">
+            {assessment?.success ? (
               <ReportCard
+                showHealth={false}
                 scores={assessment.data.scores}
                 issues={assessment.data.issues}
                 actions={assessment.data.actions}
@@ -214,17 +242,17 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
                   />
                 }
               />
-            </>
-          ) : (
-            <div className="rounded-2xl border border-border bg-surface p-4 text-center">
-              <p className="font-medium">No health check yet</p>
-              <p className="mt-1 text-sm text-muted">This plant was added but its photo check didn&apos;t finish.</p>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="rounded-2xl border border-border bg-surface p-4 text-center">
+                <p className="font-medium">No health check yet</p>
+                <p className="mt-1 text-sm text-muted">This plant was added but its photo check didn&apos;t finish. A check-in will run it again.</p>
+              </div>
+            )}
+          </div>
+        </section>
 
         {history && history.length > 0 && (
-          <section className="mt-10">
+          <section id="progress" className="mt-10 scroll-mt-20">
             <h2 className="text-lg font-semibold">Progress</h2>
             <div className="mt-3 space-y-3">
               <HealthTrend
@@ -235,15 +263,19 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           </section>
         )}
 
-        <PlanSection
-          plantId={plant.id}
-          potCm={Number(plant.pot_diameter_cm)}
-          milestones={milestones}
-          fertilizer={care?.fertilizer ?? null}
-        />
+        {hasPlan && (
+          <div id="plan" className="scroll-mt-20">
+            <PlanSection
+              plantId={plant.id}
+              potCm={Number(plant.pot_diameter_cm)}
+              milestones={milestones}
+              fertilizer={care?.fertilizer ?? null}
+            />
+          </div>
+        )}
 
         {care && (
-          <section className="mt-10">
+          <section id="care" className="mt-10 scroll-mt-20">
             <h2 className="text-lg font-semibold">Care sheet</h2>
             <dl className="mt-3 divide-y divide-border rounded-2xl border border-border bg-surface text-sm">
               {[
@@ -271,17 +303,15 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
             </dl>
           </section>
         )}
-
-        {!rescue && plant.status !== "er" && (
-          <Link href={`/plants/${plant.id}/rescue`} className="mt-10 block text-sm font-medium text-terracotta">
-            🚨 Something looks wrong? Start a Plant ER check →
-          </Link>
-        )}
-
-        <div className="mt-12">
-          <DeletePlantButton id={plant.id} nickname={plant.nickname} />
-        </div>
       </div>
+
+      <PlantActions
+        plantId={plant.id}
+        nickname={plant.nickname}
+        checkinDue={checkinDue}
+        waterDue={!!(waterTask && waterDueToday)}
+        rescue={rescue ? "open" : "start"}
+      />
     </main>
   );
 }

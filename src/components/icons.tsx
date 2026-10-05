@@ -119,3 +119,42 @@ export const CloseIcon = (p: IconProps) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </Icon>
 );
+
+export const SearchIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m16 16 4 4" />
+  </Icon>
+);
+
+/** Health trend: up, down or level. */
+export const TrendIcon = ({ trend, ...p }: IconProps & { trend: "up" | "down" | "steady" }) => (
+  <Icon {...p}>
+    {trend === "up" ? (
+      <path d="M12 19V5M6 11l6-6 6 6" />
+    ) : trend === "down" ? (
+      <path d="M12 5v14M6 13l6 6 6-6" />
+    ) : (
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    )}
+  </Icon>
+);
+
+export const DotsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5.5 12h.01M12 12h.01M18.5 12h.01" strokeWidth={3} />
+  </Icon>
+);
+
+export const DropIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 3.5c3 3.6 6 7.2 6 10.5a6 6 0 0 1-12 0c0-3.3 3-6.9 6-10.5Z" />
+  </Icon>
+);
+
+export const TrashIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4.5 7h15M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2M6.5 7l.8 11.6a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7" />
+    <path d="M10 11v5M14 11v5" />
+  </Icon>
+);

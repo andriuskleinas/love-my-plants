@@ -24,7 +24,7 @@ export default async function VacationPage() {
   const trip = await loadTrip(supabase, userId);
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl">
       <PageHeader title="Going away" back={{ href: "/more", label: "More" }} />
 
       {!trip ? (

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Logo } from "@/components/brand/logo";
 import { CartIcon, GearIcon, LeafIcon, MenuIcon, PeopleIcon, PlusIcon, SuitcaseIcon, SunIcon } from "@/components/icons";
+import { ToastProvider } from "@/components/toast";
 import { AddSheet } from "./add-sheet";
 
 type NavItem = { href: string; label: string; icon: ComponentType<{ size?: number }>; match: (path: string) => boolean };
@@ -30,15 +31,15 @@ const FOCUSED = [/^\/plants\/new$/, /^\/plants\/[^/]+\/checkin$/];
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [adding, setAdding] = useState(false);
-  if (FOCUSED.some((re) => re.test(path))) return <>{children}</>;
+  if (FOCUSED.some((re) => re.test(path))) return <ToastProvider>{children}</ToastProvider>;
 
   return (
-    <>
+    <ToastProvider>
       <Sidebar path={path} onAdd={() => setAdding(true)} />
       <div className="flex flex-1 flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:pb-0 lg:pl-72">{children}</div>
       <TabBar path={path} onAdd={() => setAdding(true)} />
       <AddSheet open={adding} onClose={() => setAdding(false)} />
-    </>
+    </ToastProvider>
   );
 }
 

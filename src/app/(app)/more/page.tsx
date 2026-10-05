@@ -47,7 +47,7 @@ export default async function MorePage() {
   ];
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl">
       <PageHeader title="More" />
       <ul className="mt-2 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
         {links.map(({ href, label, status, icon: Icon }) => (

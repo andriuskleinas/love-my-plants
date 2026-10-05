@@ -16,7 +16,7 @@ export default async function ShoppingPage() {
   const { items, suggestions } = homeId ? await loadShopping(homeId) : { items: [], suggestions: [] };
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12">
+    <main className="mx-auto w-full max-w-md flex-1 px-4 pb-12 lg:max-w-2xl">
       <PageHeader title="Shopping list" />
       <p className="mt-1 text-muted">
         Also in Telegram: send <b>/list</b> in the shop, or a photo of a product to check it suits your plants.
