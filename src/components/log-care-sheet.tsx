@@ -69,27 +69,50 @@ function doneAtFor(day: Day, earlier: string): string {
   return date.toISOString();
 }
 
+export type LogPlant = { id: string; nickname: string; potCm: number; photoUrl?: string | null };
+
 type Props = {
   open: boolean;
   /** Start on this kind of care instead of the list. */
   initialType: LogType | null;
   onClose: () => void;
-  plantId: string;
-  nickname: string;
-  potCm: number;
+  /** One plant (its own page) or several to choose from (Today). */
+  plants: LogPlant[];
 };
 
+type Saved = { nickname: string; nextDueAt?: string | null; learned?: boolean };
+
+/** "Sir Hiss", "Sir Hiss and Palmela", "Sir Hiss, Palmela and Lucky Penny" */
+const names = (list: string[]) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).join(", ")} and ${list.at(-1)}`);
+
+/** What the toast says once everything is saved. */
+function savedMessage(type: LogType, saved: Saved[], pot: number): string {
+  if (type === "repot") return `Saved. ${saved[0].nickname}'s plan now follows the ${pot} cm pot.`;
+  const next = saved.filter((s) => s.nextDueAt);
+  if (type !== "water" || !next.length) return "Saved to the care history.";
+  const when =
+    next.length === 1
+      ? `Next watering ${dueLabel(new Date(next[0].nextDueAt!))}.`
+      : `Next watering: ${next.map((s) => `${s.nickname} ${dueLabel(new Date(s.nextDueAt!))}`).join(", ")}.`;
+  const faster = saved.filter((s) => s.learned).map((s) => s.nickname);
+  if (!faster.length) return when;
+  return `${when} ${names(faster)} ${faster.length > 1 ? "dry" : "dries"} out faster than we thought, so we'll water a bit more often.`;
+}
+
 /** "I did something": log care done without a reminder, so the plan can follow. */
-export function LogCareSheet({ open, initialType, onClose, plantId, nickname, potCm }: Props) {
+export function LogCareSheet({ open, initialType, onClose, plants }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const toast = useToast();
+  const single = plants.length === 1;
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [pickingPlants, setPickingPlants] = useState(!single);
   const [type, setType] = useState<LogType | null>(null);
   const [day, setDay] = useState<Day>("today");
   const [earlier, setEarlier] = useState("");
   const [soil, setSoil] = useState<LoggedSoil | null>(null);
   const [note, setNote] = useState("");
-  const [pot, setPot] = useState(nextPotSize(potCm));
+  const [pot, setPot] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,17 +120,24 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      setChosen(single ? [plants[0].id] : []);
+      setPickingPlants(!single);
       setType(initialType);
       setDay("today");
       setEarlier("");
       setSoil(null);
       setNote("");
-      setPot(nextPotSize(potCm));
       setError(null);
       dialog.showModal();
       dialog.focus();
     } else if (!open && dialog.open) dialog.close();
-  }, [open, initialType, potCm]);
+  }, [open, initialType, single, plants]);
+
+  const selected = plants.filter((p) => chosen.includes(p.id));
+  const who = selected.length === 1 ? selected[0].nickname : `${selected.length} plants`;
+  const potCm = selected.length === 1 ? selected[0].potCm : 0;
+  // Repotting needs one plant's pot size, so it's offered for one plant at a time.
+  const types = selected.length > 1 ? LOG_TYPES.filter((t) => t !== "repot") : LOG_TYPES;
 
   const today = new Date();
   const minDate = isoDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30));
@@ -117,37 +147,53 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
   const missing =
     (day === "earlier" && !earlier) || (type === "water" && !soil) || (type === "other" && !note.trim());
 
+  function chooseType(t: LogType) {
+    setType(t);
+    if (t === "repot") setPot(nextPotSize(potCm));
+  }
+
+  function back() {
+    if (type) setType(null);
+    else setPickingPlants(true);
+  }
+
   async function send(keepalive: boolean) {
+    if (!type) return { ok: false as const, error: "Nothing was chosen. Choose what you did." };
     const doneAt = doneAtFor(day, earlier);
-    if (type === "repot") {
-      const res = await callApi(`/api/plants/${plantId}/repotted`, { method: "POST", json: { potDiameterCm: pot, doneAt }, keepalive });
-      return res.ok ? { ok: true as const, message: `Saved. ${nickname}'s plan now follows the ${pot} cm pot.` } : res;
+    const saved: Saved[] = [];
+    // One at a time, so each plant's schedule is planned from a settled state.
+    for (const plant of selected) {
+      if (type === "repot") {
+        const res = await callApi(`/api/plants/${plant.id}/repotted`, { method: "POST", json: { potDiameterCm: pot, doneAt }, keepalive });
+        if (!res.ok) return res;
+        saved.push({ nickname: plant.nickname });
+        continue;
+      }
+      const res = await callApi<{ nextDueAt?: string | null; learned?: boolean }>(`/api/plants/${plant.id}/care`, {
+        method: "POST",
+        json: { type, doneAt, soil: type === "water" ? soil : undefined, note: note.trim() || undefined },
+        keepalive,
+      });
+      if (!res.ok) {
+        const done = saved.map((s) => s.nickname);
+        return { ok: false as const, error: done.length ? `${res.error} ${names(done)} ${done.length > 1 ? "were" : "was"} saved.` : res.error };
+      }
+      saved.push({ nickname: plant.nickname, ...res.data });
     }
-    const res = await callApi<{ nextDueAt?: string | null; learned?: boolean }>(`/api/plants/${plantId}/care`, {
-      method: "POST",
-      json: { type, doneAt, soil: type === "water" ? soil : undefined, note: note.trim() || undefined },
-      keepalive,
-    });
-    if (!res.ok) return res;
-    if (type !== "water" || !res.data.nextDueAt) return { ok: true as const, message: "Saved to the care history." };
-    const next = `Next watering ${dueLabel(new Date(res.data.nextDueAt))}.`;
-    return {
-      ok: true as const,
-      message: res.data.learned ? `${next} ${nickname} dries out faster than we thought, so we'll water a bit more often.` : next,
-    };
+    return { ok: true as const, message: savedMessage(type, saved, pot) };
   }
 
   async function save() {
-    if (!type || missing) return;
+    if (!type || missing || !selected.length) return;
     const { emoji, label } = CARE_LABELS[type];
     setError(null);
     if (toast) {
       onClose();
       toast.defer({
-        message: `${emoji} ${type === "other" ? "Logged" : label} · ${nickname}`,
+        message: `${emoji} ${type === "other" ? "Logged" : label} · ${names(selected.map((p) => p.nickname))}`,
         run: async () => {
           const res = await send(true);
-          if (res.ok) router.refresh();
+          router.refresh();
           return res;
         },
         onUndo: () => {},
@@ -158,9 +204,9 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
     setBusy(true);
     const res = await send(false);
     setBusy(false);
+    router.refresh();
     if (!res.ok) return setError(res.error);
     onClose();
-    router.refresh();
   }
 
   const chip = (selected: boolean) =>
@@ -170,7 +216,7 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
     <dialog
       ref={ref}
       tabIndex={-1}
-      aria-label={`Log care for ${nickname}`}
+      aria-label={single ? `Log care for ${plants[0].nickname}` : "Log care"}
       onClose={onClose}
       onClick={(e) => e.target === ref.current && onClose()}
       className="m-0 mt-auto max-h-[90dvh] w-full max-w-none overflow-y-auto rounded-t-3xl bg-surface p-0 text-foreground outline-none backdrop:bg-black/40 lg:m-auto lg:max-w-md lg:rounded-3xl"
@@ -178,27 +224,85 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
       <div className="px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-border lg:hidden" aria-hidden />
         <div className="flex items-center gap-2">
-          {type && (
-            <button onClick={() => setType(null)} aria-label="Back to the list" className="-ml-2 rounded-full p-2 text-muted">
+          {!pickingPlants && (type || !single) && (
+            <button onClick={back} aria-label="Back" className="-ml-2 rounded-full p-2 text-muted">
               <BackIcon size={20} />
             </button>
           )}
           <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">
-            {type ? `${CARE_LABELS[type].emoji} ${CARE_LABELS[type].label}` : `What did you do for ${nickname}?`}
+            {pickingPlants
+              ? "Which plants?"
+              : type
+                ? `${CARE_LABELS[type].emoji} ${CARE_LABELS[type].label}${single ? "" : ` · ${who}`}`
+                : `What did you do for ${who}?`}
           </h2>
           <button onClick={onClose} aria-label="Close" className="-mr-2 rounded-full p-2 text-muted">
             <CloseIcon size={20} />
           </button>
         </div>
 
-        {!type ? (
+        {pickingPlants ? (
+          <>
+            <p className="mt-1 text-sm text-muted">Log care you did without a reminder, so the plan can follow. Choose one or more.</p>
+            <ul className="mt-4 grid grid-cols-3 gap-2">
+              {plants.map((p) => {
+                const on = chosen.includes(p.id);
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => setChosen((c) => (on ? c.filter((id) => id !== p.id) : [...c, p.id]))}
+                      className={`relative flex w-full flex-col items-center gap-1.5 rounded-2xl border p-2 text-center text-sm ${on ? "border-leaf bg-leaf-soft font-medium" : "border-border"}`}
+                    >
+                      {p.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
+                        <img src={p.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                      ) : (
+                        <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-leaf-soft text-2xl" aria-hidden>
+                          🪴
+                        </span>
+                      )}
+                      <span className="w-full truncate">{p.nickname}</span>
+                      {on && (
+                        <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-leaf text-xs text-background" aria-hidden>
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setChosen(chosen.length === plants.length ? [] : plants.map((p) => p.id))}
+                className="h-12 rounded-full border border-border px-4 text-sm font-medium"
+              >
+                {chosen.length === plants.length ? "Clear" : "All plants"}
+              </button>
+              <button
+                type="button"
+                disabled={!chosen.length}
+                onClick={() => {
+                  setPickingPlants(false);
+                  if (type === "repot" && chosen.length > 1) setType(null);
+                }}
+                className="h-12 flex-1 rounded-full bg-leaf font-medium text-background disabled:opacity-50"
+              >
+                Next{chosen.length ? ` (${chosen.length})` : ""}
+              </button>
+            </div>
+          </>
+        ) : !type ? (
           <>
             <p className="mt-1 text-sm text-muted">Log care you did without a reminder, so the plan can follow.</p>
             <ul className="mt-4 grid grid-cols-3 gap-2">
-              {LOG_TYPES.map((t) => (
+              {types.map((t) => (
                 <li key={t}>
                   <button
-                    onClick={() => setType(t)}
+                    onClick={() => chooseType(t)}
                     className="flex h-full w-full flex-col items-center gap-1 rounded-2xl border border-border p-3 text-center text-sm"
                   >
                     <span className="text-2xl" aria-hidden>
@@ -245,7 +349,7 @@ export function LogCareSheet({ open, initialType, onClose, plantId, nickname, po
                   ))}
                 </div>
                 {soil && soil !== "unknown" && (
-                  <p className="mt-2 text-xs text-muted">If it dried out before the reminder, we&apos;ll water {nickname} a bit more often.</p>
+                  <p className="mt-2 text-xs text-muted">If it dried out before the reminder, we&apos;ll water {selected.length === 1 ? selected[0].nickname : "them"} a bit more often.</p>
                 )}
               </fieldset>
             )}

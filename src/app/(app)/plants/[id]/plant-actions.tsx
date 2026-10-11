@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertIcon, CameraIcon, CloseIcon, DotsIcon, DropIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { callApi } from "@/lib/api-client";
 import type { LogType } from "@/lib/care/log";
-import { LogCareSheet, useLogCareRequests } from "./log-care-sheet";
+import { LogCareSheet, useLogCareRequests } from "@/components/log-care-sheet";
 
 type Props = {
   plantId: string;
@@ -28,6 +28,7 @@ export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, r
     setLog({ type });
   };
   useLogCareRequests(openLog);
+  const plants = useMemo(() => [{ id: plantId, nickname, potCm }], [plantId, nickname, potCm]);
   return (
     <>
       <div data-action-bar className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mt-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur lg:bottom-0">
@@ -93,9 +94,7 @@ export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, r
         open={!!log}
         initialType={log?.type ?? null}
         onClose={() => setLog(null)}
-        plantId={plantId}
-        nickname={nickname}
-        potCm={potCm}
+        plants={plants}
       />
     </>
   );

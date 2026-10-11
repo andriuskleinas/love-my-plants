@@ -6,6 +6,7 @@ import { Landing } from "@/components/landing/landing";
 import { scoreTone } from "@/components/report-card";
 import { TelegramCard } from "@/components/telegram-card";
 import { ProgressRing } from "@/components/today/progress-ring";
+import { LogCareButton } from "@/components/today/log-care-button";
 import { TaskList } from "@/components/today/task-list";
 import { assessmentSchema } from "@/lib/ai/schemas";
 import { needsCheckin } from "@/lib/care/plan";
@@ -22,7 +23,7 @@ const isConfigured = () =>
 /** Steps from checks older than this no longer show on Today. */
 const STEP_MAX_AGE_DAYS = 14;
 
-type PlantChip = { id: string; nickname: string; photoUrl: string | null; health: number | null; urgent: boolean };
+type PlantChip = { id: string; nickname: string; potCm: number; photoUrl: string | null; health: number | null; urgent: boolean };
 
 export default async function Home() {
   if (!isConfigured()) return <Landing />;
@@ -35,7 +36,7 @@ export default async function Home() {
   const [{ data: plants }, { data: profile }] = await Promise.all([
     supabase
       .from("plants")
-      .select("id, nickname, status, cover:photos!plants_cover_photo_fk(storage_path)")
+      .select("id, nickname, status, pot_diameter_cm, cover:photos!plants_cover_photo_fk(storage_path)")
       .neq("status", "archived")
       .order("created_at"),
     supabase.from("profiles").select("timezone, display_name").eq("id", userId).maybeSingle(),
@@ -167,6 +168,7 @@ export default async function Home() {
       plants={plants.map((p) => ({
         id: p.id,
         nickname: p.nickname,
+        potCm: Number(p.pot_diameter_cm),
         photoUrl: photoFor(p.id),
         health: latest.get(p.id)?.health ?? null,
         urgent: urgentIds.has(p.id),
@@ -234,6 +236,7 @@ function Today({
           ) : (
             <AllDone done={done} next={coming[0]} tz={tz} now={now} />
           )}
+          <LogCareButton plants={plants} />
 
           {coming.length > 0 && (
             <section className="mt-8" aria-labelledby="coming-heading">

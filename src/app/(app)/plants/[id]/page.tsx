@@ -17,7 +17,7 @@ import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 import { healthTrend } from "@/lib/plants/collection";
-import { LogCareLink } from "./log-care-sheet";
+import { LogCareLink } from "@/components/log-care-sheet";
 import { PlanSection } from "./plan-section";
 import { PlantActions } from "./plant-actions";
 import { SectionNav, type Section } from "./section-nav";
