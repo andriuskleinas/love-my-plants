@@ -34,6 +34,8 @@ export interface AssessContext {
   /** What the owner ticked ("yellow leaves", …) and wrote ("forgot it for 2 weeks"). */
   symptoms?: string[];
   note?: string | null;
+  /** What the owner did lately ("2026-10-11: Watered · soil was dry"), newest first. */
+  careLog?: string[];
   /** During an active rescue: where we are and what was done. */
   rescue?: { day: number; diagnosis: string[]; doneSteps: string[]; missedSteps: string[] } | null;
 }
@@ -66,6 +68,7 @@ If a photo needed for a score is missing (e.g. no soil close-up), estimate from 
 - If the photos are too blurry, dark, cropped, or don't show a plant, set photoQuality.ok=false with one specific retake hint (e.g. "Step back so the whole plant and pot are in frame"). Still fill every field with your best guess.
 - species: up to 3 guesses, most likely first, with scientific and common names.
 - actions: at most 3, most important first, each one short concrete step a beginner can do today with real-world units ("Water about 250 ml (one glass) slowly until it drains, then empty the saucer"). If nothing is needed today, give one reassuring action like "No water today — we'll remind you when it's time".
+- Care log: the request may list care the owner already did lately. Don't repeat a step they did in the last few days (e.g. no watering step the day after they watered) unless the photos clearly show it's needed again.
 - Watering: whenever a step says to water, use exactly the amount given in the request. Never promise a number of days until the next watering; the app's reminders handle timing and learn from the owner's feedback.
 - estimatedHeightCm: estimate plant height above the soil, using the pot diameter given as scale. null if impossible.
 - repotSignals: rootsVisible only if roots are visible at the drainage holes or soil surface; drainsTooFast only if there is visible evidence.
@@ -102,6 +105,7 @@ function contextText(ctx: AssessContext): string {
   }
   if (ctx.symptoms?.length) lines.push(`Owner reports: ${ctx.symptoms.join(", ")}`);
   if (ctx.note) lines.push(`Owner's note: "${ctx.note.replace(/"/g, "'")}"`);
+  if (ctx.careLog?.length) lines.push(`Owner's care log, newest first: ${ctx.careLog.join(" | ")}`);
   if (ctx.rescue) {
     lines.push(
       `Active rescue, day ${ctx.rescue.day}. Earlier diagnosis: ${ctx.rescue.diagnosis.join("; ")}.`,

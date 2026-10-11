@@ -1,3 +1,4 @@
+import { FEED_EVERY_DAYS } from "@/lib/care/log";
 import type { RepotDetails } from "@/lib/care/plan.server";
 import { RepottedButton } from "./repotted-button";
 
@@ -12,17 +13,23 @@ export function PlanSection({
   potCm,
   milestones,
   fertilizer,
+  lastFedAt,
 }: {
   plantId: string;
   potCm: number;
   milestones: Milestone[];
   fertilizer: string | null;
+  /** Last logged feeding, if any. */
+  lastFedAt: string | null;
 }) {
   const repot = milestones.find((m) => m.type === "repot");
   const feed = milestones.find((m) => m.type === "fertilize_season");
   if (!repot && !feed) return null;
   const r = repot?.details as RepotDetails | undefined;
   const f = feed?.details as { start: string; end: string; active: boolean } | undefined;
+  const lastFed = lastFedAt ? new Date(lastFedAt) : null;
+  const nextFeed = lastFed ? new Date(lastFed.getTime() + FEED_EVERY_DAYS * 86_400_000) : null;
+  const shortDate = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "long" });
 
   return (
     <section className="mt-10">
@@ -61,6 +68,12 @@ export function PlanSection({
                 ? fertilizer ?? "Feed with a liquid houseplant fertilizer about once a month."
                 : "Plants rest in the darker months, so no fertilizer until then."}
             </p>
+            {lastFed && nextFeed && (
+              <p className="mt-1 text-sm">
+                Last fed <b>{shortDate(lastFed)}</b>
+                {f.active && (nextFeed <= new Date() ? ". Time for the next feed." : `. Next feed around ${shortDate(nextFeed)}.`)}
+              </p>
+            )}
           </li>
         )}
       </ol>

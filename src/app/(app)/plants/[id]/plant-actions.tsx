@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AlertIcon, CameraIcon, CloseIcon, DotsIcon, DropIcon, TrashIcon } from "@/components/icons";
+import { AlertIcon, CameraIcon, CloseIcon, DotsIcon, DropIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { callApi } from "@/lib/api-client";
+import type { LogType } from "@/lib/care/log";
+import { LogCareSheet, useLogCareRequests } from "./log-care-sheet";
 
 type Props = {
   plantId: string;
   nickname: string;
+  potCm: number;
   checkinDue: boolean;
   /** Watering is due today: the Water button jumps to its card. */
   waterDue: boolean;
@@ -17,8 +20,14 @@ type Props = {
 };
 
 /** The plant page's main actions, kept within thumb reach at the bottom of the screen. */
-export function PlantActions({ plantId, nickname, checkinDue, waterDue, rescue }: Props) {
+export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, rescue }: Props) {
   const [menu, setMenu] = useState(false);
+  const [log, setLog] = useState<{ type: LogType | null } | null>(null);
+  const openLog = (type: LogType | null) => {
+    setMenu(false);
+    setLog({ type });
+  };
+  useLogCareRequests(openLog);
   return (
     <>
       <div data-action-bar className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 mt-10 border-t border-border bg-background/90 px-4 py-3 backdrop-blur lg:bottom-0">
@@ -50,6 +59,17 @@ export function PlantActions({ plantId, nickname, checkinDue, waterDue, rescue }
               Water
             </a>
           )}
+          {!waterDue && (
+            <button
+              type="button"
+              onClick={() => openLog(null)}
+              aria-haspopup="dialog"
+              className="flex h-12 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-leaf px-4 font-medium text-leaf"
+            >
+              <PlusIcon size={20} className="shrink-0" />
+              Log care
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setMenu(true)}
@@ -61,7 +81,22 @@ export function PlantActions({ plantId, nickname, checkinDue, waterDue, rescue }
           </button>
         </div>
       </div>
-      <MoreSheet open={menu} onClose={() => setMenu(false)} plantId={plantId} nickname={nickname} rescue={rescue} />
+      <MoreSheet
+        open={menu}
+        onClose={() => setMenu(false)}
+        onLog={() => openLog(null)}
+        plantId={plantId}
+        nickname={nickname}
+        rescue={rescue}
+      />
+      <LogCareSheet
+        open={!!log}
+        initialType={log?.type ?? null}
+        onClose={() => setLog(null)}
+        plantId={plantId}
+        nickname={nickname}
+        potCm={potCm}
+      />
     </>
   );
 }
@@ -69,12 +104,14 @@ export function PlantActions({ plantId, nickname, checkinDue, waterDue, rescue }
 function MoreSheet({
   open,
   onClose,
+  onLog,
   plantId,
   nickname,
   rescue,
 }: {
   open: boolean;
   onClose: () => void;
+  onLog: () => void;
   plantId: string;
   nickname: string;
   rescue: Props["rescue"];
@@ -146,6 +183,15 @@ function MoreSheet({
           </>
         ) : (
           <ul className="mt-3 space-y-2">
+            <li>
+              <button onClick={onLog} className="flex w-full items-center gap-4 rounded-2xl border border-border p-4 text-left">
+                <PlusIcon size={28} className="shrink-0 text-leaf" />
+                <span>
+                  <span className="block font-semibold">Log care</span>
+                  <span className="block text-sm text-muted">Watered, fed, pruned… without a reminder</span>
+                </span>
+              </button>
+            </li>
             <li>
               <Link
                 href={`/plants/${plantId}/rescue`}

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { assessPlant, AssessmentError, ASSESS_MODEL, type AssessPhoto } from "@/lib/ai/assess";
 import { needsEmergency } from "@/lib/ai/schemas";
+import { careLogText } from "@/lib/care/log";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { rescueDay, SYMPTOMS } from "@/lib/care/rescue";
 import { initialWaterDueAt, wateringIntervalDays, waterAmountMl, type Hemisphere } from "@/lib/care/watering";
@@ -16,6 +17,9 @@ import {
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 120;
+
+/** How far back the owner's care log goes in the AI's context. */
+const CARE_LOG_DAYS = 14;
 
 const bodySchema = z.object({
   photos: z
@@ -57,7 +61,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
 
     await consumeAiQuota(userId);
 
-    const [{ data: profile }, { data: previous }, { data: activeRescue }] = await Promise.all([
+    const [{ data: profile }, { data: previous }, { data: activeRescue }, { data: recentCare }] = await Promise.all([
       supabase.from("profiles").select("hemisphere, latitude, location_name, timezone").eq("id", userId).maybeSingle(),
       supabase
         .from("assessments")
@@ -72,6 +76,13 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         .eq("plant_id", plantId)
         .is("ended_at", null)
         .maybeSingle(),
+      supabase
+        .from("care_events")
+        .select("type, note, soil_feedback, done_at")
+        .eq("plant_id", plantId)
+        .gte("done_at", new Date(Date.now() - CARE_LOG_DAYS * 86_400_000).toISOString())
+        .order("done_at", { ascending: false })
+        .limit(10),
     ]);
     // A check-in during a rescue is always an emergency follow-up.
     const emergency = Boolean(parsed.data.emergency || activeRescue);
@@ -95,6 +106,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       emergency,
       symptoms: parsed.data.symptoms,
       note: parsed.data.note || null,
+      careLog: careLogText(recentCare ?? []),
       rescue: activeRescue
         ? {
             day: rescueDay(new Date(activeRescue.started_at), now, profile?.timezone ?? "UTC"),

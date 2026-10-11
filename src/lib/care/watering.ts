@@ -185,6 +185,38 @@ export function planAfterWaterReminder(
   };
 }
 
+/** What the owner says about the soil when they log a watering they did on their own. */
+export type LoggedSoil = "dry" | "dry_drooping" | "unknown";
+
+/** Waterings less than this much before the reminder are on time, not a sign to learn from. */
+const EARLY_GRACE_DAYS = 1;
+
+/**
+ * The owner watered without a reminder (logged from the plant page). If the soil was already
+ * dry well before the reminder, the plant drinks faster than we thought: move the learned factor
+ * part of the way toward what we saw, so one odd day doesn't swing the schedule too far.
+ * `cycle` is when the current watering cycle started and when its reminder is due.
+ */
+export function planAfterLoggedWatering(
+  soil: LoggedSoil,
+  input: Omit<WateringInput, "learnedFactor"> & { learnedFactor: number },
+  cycle?: { startedAt: Date; dueAt: Date } | null,
+): WaterPlan {
+  const wateredAt = input.date;
+  let learnedFactor = input.learnedFactor;
+  if (soil !== "unknown" && cycle) {
+    const expected = (cycle.dueAt.getTime() - cycle.startedAt.getTime()) / DAY_MS;
+    const observed = (wateredAt.getTime() - cycle.startedAt.getTime()) / DAY_MS;
+    if (expected > 0 && observed > 0 && expected - observed >= EARLY_GRACE_DAYS) {
+      learnedFactor *= Math.sqrt(clamp(observed / expected, 0.5, 1));
+    }
+  }
+  if (soil === "dry_drooping") learnedFactor *= 0.85;
+  learnedFactor = clamp(learnedFactor, 0.5, 2);
+  const intervalDays = wateringIntervalDays({ ...input, learnedFactor });
+  return { watered: true, learnedFactor, intervalDays, nextDueAt: nextWaterAt(wateredAt, intervalDays) };
+}
+
 /**
  * First watering reminder for a newly registered plant, when we don't know when it was
  * last watered: thirsty-looking plants are due today, others part-way through an interval.

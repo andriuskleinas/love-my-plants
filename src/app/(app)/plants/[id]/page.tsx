@@ -7,18 +7,22 @@ import { StepList } from "@/components/step-list";
 import { Timelapse, type Frame } from "@/components/timelapse";
 import { WaterCard } from "@/components/water-card";
 import { assessmentSchema } from "@/lib/ai/schemas";
+import { careEmoji, careEventText } from "@/lib/care/log";
 import { needsCheckin } from "@/lib/care/plan";
 import { planLength, rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
-import { endOfLocalDay } from "@/lib/care/schedule";
+import { endOfLocalDay, localTime } from "@/lib/care/schedule";
 import type { Hemisphere } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 import { healthTrend } from "@/lib/plants/collection";
+import { LogCareLink } from "./log-care-sheet";
 import { PlanSection } from "./plan-section";
 import { PlantActions } from "./plant-actions";
 import { SectionNav, type Section } from "./section-nav";
+
+const HISTORY_SHOWN = 15;
 
 export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const { id } = await params;
@@ -64,8 +68,9 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   const assessment = latest ? assessmentSchema.safeParse(latest.raw) : null;
 
   const { data: claims } = await supabase.auth.getClaims();
-  const [{ data: profile }, { data: ticks }, { data: history }, { data: photos }, milestonesResult] = await Promise.all([
-    supabase.from("profiles").select("timezone, hemisphere").eq("id", claims?.claims?.sub ?? "").maybeSingle(),
+  const userId = claims?.claims?.sub ?? "";
+  const [{ data: profile }, { data: ticks }, { data: history }, { data: photos }, milestonesResult, { data: careLog }, { data: lastFed }] = await Promise.all([
+    supabase.from("profiles").select("timezone, hemisphere").eq("id", userId).maybeSingle(),
     latest
       ? supabase.from("care_events").select("action_index").eq("assessment_id", latest.id)
       : Promise.resolve({ data: [] as { action_index: number }[] }),
@@ -80,6 +85,20 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
       .eq("plant_id", id)
       .order("taken_at"),
     supabase.from("milestones").select("type, target_date, details").eq("plant_id", id),
+    supabase
+      .from("care_events")
+      .select("id, type, note, soil_feedback, done_at, member:home_members(display_name, user_id)")
+      .eq("plant_id", id)
+      .order("done_at", { ascending: false })
+      .limit(HISTORY_SHOWN),
+    supabase
+      .from("care_events")
+      .select("done_at")
+      .eq("plant_id", id)
+      .eq("type", "fertilize")
+      .order("done_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
   const { data: rescue } = await supabase
     .from("rescue_plans")
@@ -128,8 +147,18 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     { id: "today", label: "Today" },
     ...(history?.length ? [{ id: "progress", label: "Progress" }] : []),
     ...(hasPlan ? [{ id: "plan", label: "Plan" }] : []),
+    ...(careLog?.length ? [{ id: "history", label: "History" }] : []),
     ...(care ? [{ id: "care", label: "Care sheet" }] : []),
   ];
+  const now = new Date();
+  const todayLocal = localTime(tz, now).date;
+  const yesterdayLocal = localTime(tz, new Date(now.getTime() - 86_400_000)).date;
+  const historyDay = (iso: string) => {
+    const day = localTime(tz, new Date(iso)).date;
+    if (day === todayLocal) return "Today";
+    if (day === yesterdayLocal) return "Yesterday";
+    return new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short" }).format(new Date(iso));
+  };
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 lg:max-w-2xl lg:pt-6">
@@ -219,6 +248,9 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           {waterTask && !waterDueToday && (
             <p className="mt-4 rounded-2xl bg-leaf-soft p-3 text-sm">
               💧 Next watering <b>{dueLabel(new Date(waterTask.due_at))}</b>: {waterTask.title.toLowerCase()}
+              <br />
+              <span className="text-muted">Soil already dry and you watered it? </span>
+              <LogCareLink type="water">Log it</LogCareLink>
             </p>
           )}
 
@@ -270,8 +302,35 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
               potCm={Number(plant.pot_diameter_cm)}
               milestones={milestones}
               fertilizer={care?.fertilizer ?? null}
+              lastFedAt={lastFed?.done_at ?? null}
             />
           </div>
+        )}
+
+        {careLog && careLog.length > 0 && (
+          <section id="history" className="mt-10 scroll-mt-20">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-lg font-semibold">History</h2>
+              <LogCareLink>+ Log care</LogCareLink>
+            </div>
+            <ul className="mt-3 divide-y divide-border rounded-2xl border border-border bg-surface text-sm">
+              {careLog.map((e) => {
+                const member = Array.isArray(e.member) ? e.member[0] : e.member;
+                return (
+                  <li key={e.id} className="flex gap-3 p-3">
+                    <span aria-hidden className="shrink-0">
+                      {careEmoji(e.type)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      {careEventText(e)}
+                      {member && member.user_id !== userId && <span className="text-muted"> · by {member.display_name}</span>}
+                    </span>
+                    <span className="shrink-0 text-muted">{historyDay(e.done_at)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
         )}
 
         {care && (
@@ -308,6 +367,7 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
       <PlantActions
         plantId={plant.id}
         nickname={plant.nickname}
+        potCm={Number(plant.pot_diameter_cm)}
         checkinDue={checkinDue}
         waterDue={!!(waterTask && waterDueToday)}
         rescue={rescue ? "open" : "start"}

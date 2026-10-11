@@ -2,6 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { visiblePlantsFor } from "@/lib/care/digest.server";
+import { careLogText } from "@/lib/care/log";
 import { rescueDay } from "@/lib/care/rescue";
 import { daylightHours, windowDirectionName, type WindowDirection } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
@@ -57,7 +58,7 @@ export async function plantContext(userId: string, now = new Date()): Promise<st
   if (!plants.length) return [...lines, "The owner hasn't added any plants yet."].join("\n");
 
   const ids = plants.slice(0, 20).map((p) => p.id);
-  const [{ data: details }, { data: checks }, { data: tasks }, { data: milestones }, { data: rescues }, { data: list }] = await Promise.all([
+  const [{ data: details }, { data: checks }, { data: tasks }, { data: milestones }, { data: rescues }, { data: list }, { data: events }] = await Promise.all([
     admin
       .from("plants")
       .select("id, nickname, species_name, pot_diameter_cm, pot_material, has_drainage, window_direction, status, species:species_profiles(soil_mix, light, toxic_to_pets)")
@@ -67,6 +68,13 @@ export async function plantContext(userId: string, now = new Date()): Promise<st
     admin.from("milestones").select("plant_id, type, target_date, details").in("plant_id", ids),
     admin.from("rescue_plans").select("plant_id, started_at, diagnosis").in("plant_id", ids).is("ended_at", null),
     admin.from("shopping_items").select("item").in("home_id", [...new Set(plants.map((p) => p.home_id))]).eq("status", "open"),
+    admin
+      .from("care_events")
+      .select("plant_id, type, note, soil_feedback, done_at")
+      .in("plant_id", ids)
+      .gte("done_at", new Date(now.getTime() - 14 * 86_400_000).toISOString())
+      .order("done_at", { ascending: false })
+      .limit(100),
   ]);
 
   lines.push("", "Plants:");
@@ -89,6 +97,8 @@ export async function plantContext(userId: string, now = new Date()): Promise<st
       );
     }
     if (water) parts.push(`  Next watering ${dueLabel(new Date(water.due_at), now)}, ${water.title.toLowerCase()}.`);
+    const done = careLogText((events ?? []).filter((e) => e.plant_id === p.id), 5);
+    if (done.length) parts.push(`  Recent care: ${done.join(" | ")}.`);
     if (repot) {
       const d = repot.details as { recommendedPotCm?: number; urgency?: string };
       parts.push(`  Next repot: ${d.urgency === "later" ? `around ${repot.target_date}` : d.urgency}, into a ${d.recommendedPotCm} cm pot.`);

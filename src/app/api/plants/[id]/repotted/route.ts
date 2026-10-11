@@ -7,7 +7,11 @@ import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
 // "I repotted it": new pot size, repot date, and a fresh plan.
-const bodySchema = z.object({ potDiameterCm: z.number().min(4).max(100) });
+const bodySchema = z.object({
+  potDiameterCm: z.number().min(4).max(100),
+  /** When it was repotted, if not just now (logged from "Log care"). */
+  doneAt: z.iso.datetime({ offset: true }).optional(),
+});
 
 export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/[id]/repotted">) {
   try {
@@ -18,9 +22,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     if (!parsed.success) throw new HttpError(400, "No pot size was chosen. Choose the new pot size.");
 
     const now = new Date();
+    const doneAt = parsed.data.doneAt ? new Date(Math.min(new Date(parsed.data.doneAt).getTime(), now.getTime())) : now;
     const { data: plant, error } = await supabase
       .from("plants")
-      .update({ pot_diameter_cm: parsed.data.potDiameterCm, last_repotted_at: now.toISOString() })
+      .update({ pot_diameter_cm: parsed.data.potDiameterCm, last_repotted_at: doneAt.toISOString() })
       .eq("id", id)
       .select("id, home_id")
       .maybeSingle();
@@ -31,6 +36,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       plant_id: id,
       type: "repot",
       note: `Repotted into a ${parsed.data.potDiameterCm} cm pot`,
+      done_at: doneAt.toISOString(),
       done_by_member: await memberIdFor(supabase, userId, plant.home_id),
     });
     const { data: profile } = await supabase.from("profiles").select("hemisphere").eq("id", userId).maybeSingle();
