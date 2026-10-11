@@ -4,7 +4,16 @@ import { askBuddy } from "@/lib/ai/buddy";
 import { addShoppingItems, loadShopping, setItemStatus, shoppingHomeFor } from "@/lib/care/shopping.server";
 import { formatRetry } from "@/lib/errors";
 import { consumeChatQuota, HttpError } from "@/lib/plants/server";
-import { decodeShopping, formatBuddyReply, formatShoppingList } from "./buddy-format";
+import {
+  decodeShopping,
+  decodeUndoCare,
+  formatBuddyReply,
+  formatLoggedCare,
+  formatShoppingList,
+  type LoggedCare,
+} from "./buddy-format";
+import type { BuddyReply } from "@/lib/ai/schemas";
+import { logCare, undoLoggedCare } from "@/lib/care/log.server";
 import { dueWaterTasksFor, userCanAccessPlant, visiblePlantsFor } from "@/lib/care/digest.server";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { answerAsSitter, dueWaterTasksForSitter, ownerSettings } from "@/lib/care/sitter.server";
@@ -45,7 +54,8 @@ const HELP =
   "🌿 <b>Plant Buddy</b>\n\n" +
   "• Ask me anything about your plants, in any language.\n" +
   "• In a shop? Send a photo of soil, a pot or fertilizer and I'll tell you if it suits your plants.\n" +
-  "• Tap the buttons under a watering reminder and I'll learn each plant's rhythm.\n\n" +
+  "• Tap the buttons under a watering reminder and I'll learn each plant's rhythm.\n" +
+  "• Tell me what you did (\"I watered Sir Hiss, the soil was dry\") and I'll save it and adjust the schedule.\n\n" +
   "/today: what needs water today\n/list: your shopping list\n/plants: how your plants are doing\n/stop: stop messages in this chat";
 
 export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void> {
@@ -155,6 +165,8 @@ async function handleToday(chatId: string) {
 async function handleCallback(cb: NonNullable<TelegramUpdate["callback_query"]>) {
   const shopping = cb.data ? decodeShopping(cb.data) : null;
   if (shopping && cb.message) return handleShoppingCallback(cb, String(cb.message.chat.id), shopping);
+  const undo = cb.data ? decodeUndoCare(cb.data) : null;
+  if (undo && cb.message) return handleUndoCare(cb, String(cb.message.chat.id), undo);
   const answer = cb.data ? decodeWaterAnswer(cb.data) : null;
   const chatId = cb.message ? String(cb.message.chat.id) : null;
   if (!answer || !chatId || !cb.message) {
@@ -270,6 +282,11 @@ async function handleChat(chatId: string, text: string, photo?: TelegramPhotoSiz
       }
     }
     await sendTelegramMessage(chatId, formatBuddyReply(reply, added));
+
+    if (reply.logCare.length) {
+      const logged = formatLoggedCare(await saveChatCare(userId, reply.logCare));
+      await sendTelegramMessage(chatId, logged.html, logged.buttons);
+    }
   } catch (error) {
     let message: string;
     if (error instanceof AssessmentError) {
@@ -286,6 +303,71 @@ async function handleChat(chatId: string, text: string, photo?: TelegramPhotoSiz
     }
     if (!(error instanceof HttpError)) console.error("buddy failed", error);
     await sendTelegramMessage(chatId, escapeHtml(message));
+  }
+}
+
+const DAY_MS = 86_400_000;
+const normalizeName = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
+
+/** Saves the care Plant Buddy picked out of the owner's message ("I watered Sir Hiss"). */
+async function saveChatCare(userId: string, entries: BuddyReply["logCare"]): Promise<LoggedCare[]> {
+  const now = new Date();
+  const plants = await visiblePlantsFor(userId, now);
+  const admin = createAdminClient();
+  const results: LoggedCare[] = [];
+  for (const entry of entries) {
+    const plant = plants.find((p) => normalizeName(p.nickname) === normalizeName(entry.plant));
+    if (!plant) {
+      results.push({ ok: false, nickname: entry.plant, error: "No plant has this name. Send /plants to see their names and try again." });
+      continue;
+    }
+    try {
+      const result = await logCare(admin, userId, plant.id, {
+        type: entry.type,
+        doneAt: new Date(now.getTime() - entry.daysAgo * DAY_MS),
+        soil: entry.soil ?? undefined,
+        note: entry.note,
+        potCm: entry.potCm != null && entry.potCm >= 4 && entry.potCm <= 100 ? entry.potCm : null,
+      });
+      results.push({
+        ok: true,
+        eventId: result.eventId,
+        nickname: plant.nickname,
+        type: entry.type,
+        daysAgo: entry.daysAgo,
+        nextWater: result.nextDueAt ? dueLabel(new Date(result.nextDueAt), now) : null,
+        learned: result.learned,
+      });
+    } catch (error) {
+      if (!(error instanceof HttpError)) console.error("chat care log failed", error);
+      results.push({
+        ok: false,
+        nickname: plant.nickname,
+        error: error instanceof HttpError ? error.message : "This wasn't saved. Send your message again, or log it on the plant's page in the app.",
+      });
+    }
+  }
+  return results;
+}
+
+async function handleUndoCare(cb: NonNullable<TelegramUpdate["callback_query"]>, chatId: string, eventId: string) {
+  const owner = await ownerForChat("telegram", chatId);
+  if (!owner?.userId) {
+    await answerTelegramCallback(cb.id, "This chat isn't connected. In the app, go to Settings → Connect Telegram.");
+    return;
+  }
+  try {
+    const { nickname, emoji, label, restored } = await undoLoggedCare(owner.userId, eventId);
+    await answerTelegramCallback(cb.id, "Undone ✓");
+    await sendTelegramMessage(
+      chatId,
+      `↩️ Undone: ${emoji} ${escapeHtml(label)} · <b>${escapeHtml(nickname)}</b>. ` +
+        (restored ? "Its schedule is back to how it was." : "Removed from the care log."),
+    );
+  } catch (error) {
+    if (!(error instanceof HttpError)) console.error("undo care failed", error);
+    const message = error instanceof HttpError ? error.message : "This wasn't undone. Tap Undo again in a minute.";
+    await answerTelegramCallback(cb.id, message.slice(0, 190));
   }
 }
 

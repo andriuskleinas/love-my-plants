@@ -147,7 +147,7 @@ export async function logWatering(
       .maybeSingle(),
     supabase
       .from("care_tasks")
-      .select("id, due_at, interval_days")
+      .select("id, due_at, interval_days, status")
       .eq("plant_id", plantId)
       .eq("type", "water")
       .in("status", ["pending", "snoozed"])
@@ -157,30 +157,50 @@ export async function logWatering(
   ]);
   if (!plant) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
 
-  const memberId = await memberIdFor(supabase, userId, plant.home_id);
-  const { error } = await supabase.from("care_events").insert({
-    plant_id: plant.id,
-    type: "water",
-    done_by_member: memberId,
-    soil_feedback: soil === "unknown" ? null : soil,
-    note,
-    done_at: wateredAt.toISOString(),
-  });
-  if (error) throw error;
-
   // An older watering than the one we know about only goes into the history.
   const lastWatered = plant.last_watered_at ? new Date(plant.last_watered_at) : null;
-  if (lastWatered && wateredAt <= lastWatered) {
-    return { nextDueAt: task?.due_at ?? null, learned: false };
+  const restarts = !lastWatered || wateredAt > lastWatered;
+  let plan: WaterPlan | null = null;
+  let learned = false;
+  if (restarts) {
+    // The cycle started at the last watering; for new plants, one interval before the reminder.
+    const dueAt = task ? new Date(task.due_at) : null;
+    const startedAt =
+      lastWatered ?? (dueAt && task?.interval_days ? new Date(dueAt.getTime() - Number(task.interval_days) * DAY_MS) : null);
+    const input = await wateringInputFor(supabase, userId, plant as PlantForWatering, wateredAt);
+    plan = planAfterLoggedWatering(soil, input, startedAt && dueAt ? { startedAt, dueAt } : null);
+    learned = plan.learnedFactor < input.learnedFactor;
   }
 
-  // The cycle started at the last watering; for new plants, one interval before the reminder.
-  const dueAt = task ? new Date(task.due_at) : null;
-  const startedAt =
-    lastWatered ?? (dueAt && task?.interval_days ? new Date(dueAt.getTime() - Number(task.interval_days) * DAY_MS) : null);
-  const input = await wateringInputFor(supabase, userId, plant as PlantForWatering, wateredAt);
-  const plan = planAfterLoggedWatering(soil, input, startedAt && dueAt ? { startedAt, dueAt } : null);
-  await saveWaterPlan(supabase, plant.id, task?.id ?? null, plan, wateredAt);
+  // What this watering replaces, so it can be undone.
+  const undoState: UndoState | null = plan
+    ? {
+        plant: { water_learned_factor: Number(plant.water_learned_factor), last_watered_at: plant.last_watered_at },
+        task: task ? { id: task.id, due_at: task.due_at, interval_days: task.interval_days == null ? null : Number(task.interval_days), status: task.status } : null,
+      }
+    : null;
+  const { data: event, error } = await supabase
+    .from("care_events")
+    .insert({
+      plant_id: plant.id,
+      type: "water",
+      done_by_member: await memberIdFor(supabase, userId, plant.home_id),
+      soil_feedback: soil === "unknown" ? null : soil,
+      note,
+      done_at: wateredAt.toISOString(),
+      undo_state: undoState,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
 
-  return { nextDueAt: plan.nextDueAt.toISOString(), learned: plan.learnedFactor < input.learnedFactor };
+  if (!plan) return { eventId: event.id as string, nextDueAt: (task?.due_at as string | undefined) ?? null, learned: false };
+  await saveWaterPlan(supabase, plant.id, task?.id ?? null, plan, wateredAt);
+  return { eventId: event.id as string, nextDueAt: plan.nextDueAt.toISOString(), learned };
+}
+
+/** A logged care event's "before" state: plant fields, and the watering reminder for a watering. */
+export interface UndoState {
+  plant: Record<string, string | number | null>;
+  task?: { id: string; due_at: string; interval_days: number | null; status: string } | null;
 }

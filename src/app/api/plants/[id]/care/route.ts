@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { LOG_TYPES, NOTE_MAX } from "@/lib/care/log";
-import { logWatering, memberIdFor } from "@/lib/care/tasks.server";
+import { logCare } from "@/lib/care/log.server";
 import { MESSAGES } from "@/lib/errors";
 import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -33,22 +33,8 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     }
     if (type === "other" && !note) throw new HttpError(400, "Nothing was written. Write what you did.");
 
-    if (type === "water") {
-      if (!soil) throw new HttpError(400, "The soil wasn't chosen. Choose how the soil was.");
-      return NextResponse.json(await logWatering(supabase, userId, plantId, soil, doneAt, note || null));
-    }
-
-    const { data: plant } = await supabase.from("plants").select("home_id").eq("id", plantId).maybeSingle();
-    if (!plant) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
-    const { error } = await supabase.from("care_events").insert({
-      plant_id: plantId,
-      type,
-      note: note || null,
-      done_at: doneAt.toISOString(),
-      done_by_member: await memberIdFor(supabase, userId, plant.home_id),
-    });
-    if (error) throw error;
-    return NextResponse.json({ ok: true });
+    if (type === "water" && !soil) throw new HttpError(400, "The soil wasn't chosen. Choose how the soil was.");
+    return NextResponse.json(await logCare(supabase, userId, plantId, { type, doneAt, soil, note: note || null }));
   } catch (error) {
     return errorResponse(error);
   }

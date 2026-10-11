@@ -1,5 +1,6 @@
 // Plant Buddy message formatting for chat apps (HTML subset, Telegram limits).
 import type { BuddyReply } from "@/lib/ai/schemas";
+import { CARE_LABELS, type LogType } from "../care/log";
 import { escapeHtml, type ButtonRows } from "./types";
 
 export const MAX_MESSAGE = 4000; // Telegram allows 4096 characters
@@ -60,5 +61,37 @@ export function formatShoppingList(
 
   const buttons: ButtonRows = open.slice(0, 20).map((i) => [{ text: `✓ ${i.item}`.slice(0, 60), data: encodeBought(i.id) }]);
   if (suggestions.length) buttons.push([{ text: "➕ Add suggestions to my list", data: "sa" }]);
+  return { html: lines.join("\n"), buttons };
+}
+
+/** Care saved from a chat message, as shown under Plant Buddy's reply. */
+export type LoggedCare =
+  | { ok: true; eventId: string; nickname: string; type: LogType; daysAgo: number; nextWater?: string | null; learned?: boolean }
+  | { ok: false; nickname: string; error: string };
+
+/** Undo payload: "cu:<careEventId>". */
+export const encodeUndoCare = (eventId: string) => `cu:${eventId}`;
+export function decodeUndoCare(data: string): string | null {
+  return /^cu:([0-9a-f-]{36})$/.exec(data)?.[1] ?? null;
+}
+
+const whenText = (daysAgo: number) => (daysAgo === 0 ? "today" : daysAgo === 1 ? "yesterday" : `${daysAgo} days ago`);
+
+export function formatLoggedCare(items: LoggedCare[]): { html: string; buttons: ButtonRows } {
+  const lines = ["📝 <b>Saved to your care log</b>"];
+  const buttons: ButtonRows = [];
+  for (const item of items) {
+    if (!item.ok) {
+      lines.push(`⚠️ ${escapeHtml(item.nickname)}: ${escapeHtml(item.error)}`);
+      continue;
+    }
+    const { emoji, label } = CARE_LABELS[item.type];
+    let line = `${emoji} <b>${escapeHtml(item.nickname)}</b>: ${label.toLowerCase()} ${whenText(item.daysAgo)}`;
+    if (item.nextWater) line += `. Next watering ${item.nextWater}`;
+    if (item.learned) line += `. It dries out faster than we thought, so we'll water a bit more often`;
+    lines.push(`${line}.`);
+    buttons.push([{ text: `↩️ Undo: ${label} ${item.nickname}`.slice(0, 60), data: encodeUndoCare(item.eventId) }]);
+  }
+  if (!buttons.length) lines[0] = "📝 <b>Nothing was saved</b>";
   return { html: lines.join("\n"), buttons };
 }

@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { refreshPlantPlan } from "@/lib/care/plan.server";
-import { memberIdFor } from "@/lib/care/tasks.server";
-import type { Hemisphere } from "@/lib/care/watering";
+import { logRepot } from "@/lib/care/log.server";
 import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -23,24 +21,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
 
     const now = new Date();
     const doneAt = parsed.data.doneAt ? new Date(Math.min(new Date(parsed.data.doneAt).getTime(), now.getTime())) : now;
-    const { data: plant, error } = await supabase
-      .from("plants")
-      .update({ pot_diameter_cm: parsed.data.potDiameterCm, last_repotted_at: doneAt.toISOString() })
-      .eq("id", id)
-      .select("id, home_id")
-      .maybeSingle();
-    if (error) throw error;
-    if (!plant) throw new HttpError(403, "You can't change this plant. Ask a household member to do it.");
-
-    await supabase.from("care_events").insert({
-      plant_id: id,
-      type: "repot",
-      note: `Repotted into a ${parsed.data.potDiameterCm} cm pot`,
-      done_at: doneAt.toISOString(),
-      done_by_member: await memberIdFor(supabase, userId, plant.home_id),
-    });
-    const { data: profile } = await supabase.from("profiles").select("hemisphere").eq("id", userId).maybeSingle();
-    await refreshPlantPlan(id, (profile?.hemisphere ?? "north") as Hemisphere, now);
+    await logRepot(supabase, userId, id, parsed.data.potDiameterCm, doneAt);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);

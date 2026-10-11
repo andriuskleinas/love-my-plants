@@ -1,5 +1,6 @@
 // Structured AI outputs (plan §5). Claude returns these via tool use; we validate before saving.
 import { z } from "zod";
+import { LOG_TYPES, NOTE_MAX } from "../care/log";
 
 export const SCORE_KEYS = [
   "health",
@@ -116,6 +117,19 @@ export const buddyReplySchema = z.object({
   addToShoppingList: z
     .array(z.object({ item: z.string().min(1).max(80), reason: z.string().max(120), plant: z.string().nullable() }))
     .max(5),
+  /** Care the owner says they already did ("I watered Sir Hiss"); the app records it. */
+  logCare: z
+    .array(
+      z.object({
+        plant: z.string().min(1).max(80),
+        type: z.enum(LOG_TYPES),
+        daysAgo: z.number().int().min(0).max(30),
+        soil: z.enum(["dry", "dry_drooping", "unknown"]).nullable(),
+        potCm: z.number().nullable(),
+        note: z.string().max(NOTE_MAX).nullable(),
+      }),
+    )
+    .max(10),
 });
 export type BuddyReply = z.infer<typeof buddyReplySchema>;
 
