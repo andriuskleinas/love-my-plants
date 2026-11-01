@@ -8,7 +8,7 @@ export interface Frame {
   heightCm: number | null;
 }
 
-const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 /** Flipbook of weekly photos: autoplay, scrub, with date and estimated height. */
 export function Timelapse({ frames }: { frames: Frame[] }) {

@@ -10,7 +10,7 @@ import { CancelTrip, PrepList, TripForm } from "./vacation-client";
 export const metadata: Metadata = { title: "Vacation · Love My Plants" };
 
 const WHEN_ORDER: PrepWhen[] = ["week_before", "day_before", "leaving", "return"];
-const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
 const ymd = (iso: string) => {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

@@ -292,7 +292,7 @@ function Changes({ assessment, previous }: { assessment: Assessment; previous: P
   const moved = SCORE_KEYS.filter((k) => k !== "health")
     .map((k) => ({ k, d: assessment.scores[k].value - (previous.scores[k]?.value ?? assessment.scores[k].value) }))
     .filter((c) => Math.abs(c.d) >= 5);
-  const since = new Date(previous.date).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  const since = new Date(previous.date).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
   const arrow = (d: number) => (d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${-d}` : "no change");
 
   return (

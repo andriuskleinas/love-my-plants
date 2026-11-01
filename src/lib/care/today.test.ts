@@ -13,7 +13,7 @@ const water = (key: string, dueAt: string, overdue: boolean): TodayTask => ({
 describe("today briefing", () => {
   it("orders tasks by urgency", () => {
     const tasks: TodayTask[] = [
-      { ...base, kind: "step", key: "s", assessmentId: "a", index: 0, step: "Wipe leaves", why: "" },
+      { ...base, kind: "step", key: "s", assessmentId: "a", index: 0, title: "Wipe leaves", step: "Wipe leaves", why: "" },
       water("today", "2026-10-04T18:00:00Z", false),
       { ...base, kind: "checkin", key: "c" },
       water("late", "2026-10-02T06:00:00Z", true),

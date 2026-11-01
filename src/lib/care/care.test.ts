@@ -213,7 +213,7 @@ describe("AI output", () => {
     species: [{ name: "Monstera deliciosa", commonName: "Swiss cheese plant", confidence: 0.92 }],
     scores: { health: score, leaves: score, pests: score, hydration: score, soil: score, light: score, pot: score, growth: score },
     issues: [],
-    actions: [{ step: "Water ~250 ml", why: "Soil is dry", taskType: "water" }],
+    actions: [{ kind: "todo", title: "Water the plant", step: "Water ~250 ml", why: "Soil is dry", taskType: "water" }],
     estimatedHeightCm: 45,
     repotSignals: { rootsVisible: false, drainsTooFast: false },
     suggestedNickname: "Monty",

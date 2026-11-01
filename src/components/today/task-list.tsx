@@ -11,147 +11,149 @@ import { callApi } from "@/lib/api-client";
 import type { TodayTask } from "@/lib/care/today";
 import { dueLabel } from "@/lib/plants/format";
 
-const LABELS: Record<TodayTask["kind"], { text: string; className: string }> = {
-  rescue: { text: "🚨 Rescue", className: "bg-terracotta/15 text-terracotta" },
-  water: { text: "💧 Water", className: "bg-leaf-soft text-leaf" },
-  checkin: { text: "📸 Check-in", className: "bg-warn/15 text-warn" },
-  step: { text: "✓ Care steps", className: "bg-border/60 text-muted" },
-};
+/** Rows shown before "Show N more". */
+const SHOWN = 5;
 
 type StepTask = Extract<TodayTask, { kind: "step" }>;
-type Item = { key: string; task: Exclude<TodayTask, StepTask> } | { key: string; steps: StepTask[] };
 
-/** One card per plant for its care steps, so the plant isn't repeated on every line. */
-function groupSteps(tasks: TodayTask[]): Item[] {
-  const items: Item[] = [];
-  for (const t of tasks) {
-    if (t.kind !== "step") {
-      items.push({ key: t.key, task: t });
-      continue;
-    }
-    const group = items.find((i): i is { key: string; steps: StepTask[] } => "steps" in i && i.steps[0].plantId === t.plantId);
-    if (group) group.steps.push(t);
-    else items.push({ key: `g${t.plantId}`, steps: [t] });
-  }
-  return items;
-}
-
-/** Today's to-do list, most urgent first: rescues, watering and check-ins, then each plant's care steps. */
+/** Today's to-do list, most urgent first: one line per task, tap to open the details. */
 export function TaskList({ tasks }: { tasks: TodayTask[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? tasks : tasks.slice(0, SHOWN);
   return (
-    <ul className="space-y-2">
-      {groupSteps(tasks).map((item) => (
-        <li key={item.key} className="empty:hidden">
-          {"steps" in item ? (
-            <StepGroup steps={item.steps} />
-          ) : item.task.kind === "water" ? (
-            <WaterRow task={item.task} />
-          ) : (
-            <LinkRow task={item.task} />
-          )}
+    <CompactList more={all ? 0 : tasks.length - shown.length} onMore={() => setAll(true)}>
+      {shown.map((t) => (
+        <li key={t.key} className="empty:hidden">
+          {t.kind === "water" ? <WaterRow task={t} /> : t.kind === "step" ? <StepRow task={t} /> : <LinkRow task={t} />}
         </li>
       ))}
-    </ul>
+    </CompactList>
   );
 }
 
-function Thumb({ url }: { url: string | null }) {
-  return url ? (
-    <PlantPicture url={url} className="h-12 w-12 shrink-0 rounded-xl" />
-  ) : (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-xl" aria-hidden>
-      🪴
+/** A bordered list of one-line rows with an optional "Show N more" at the bottom. */
+export function CompactList({ children, more, onMore }: { children: ReactNode; more: number; onMore: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <ul className="divide-y divide-border">{children}</ul>
+      {more > 0 && (
+        <button onClick={onMore} className="w-full border-t border-border py-2.5 text-sm font-medium text-leaf">
+          Show {more} more
+        </button>
+      )}
     </div>
   );
 }
 
-function Meta({ task, extra }: { task: TodayTask; extra?: ReactNode }) {
-  const label = LABELS[task.kind];
+export function Thumb({ url }: { url: string | null }) {
+  return url ? (
+    <PlantPicture url={url} className="h-10 w-10 shrink-0 rounded-lg" />
+  ) : (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-leaf-soft text-lg" aria-hidden>
+      🪴
+    </span>
+  );
+}
+
+/** Picture, title and a muted second line, all on one row. */
+export function RowText({ url, title, sub, titleClass = "" }: { url?: string | null; title: string; sub: ReactNode; titleClass?: string }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-      <span className={`rounded-full px-2 py-0.5 font-medium ${label.className}`}>{label.text}</span>
-      <span className="text-muted">{task.nickname}</span>
-      {extra}
-    </p>
+    <>
+      {url !== undefined && <Thumb url={url} />}
+      <span className="min-w-0 flex-1">
+        <span className={`line-clamp-2 font-medium leading-snug ${titleClass}`}>{title}</span>
+        <span className="block truncate text-xs text-muted">{sub}</span>
+      </span>
+    </>
+  );
+}
+
+/** The tappable top line of a row that opens its details. */
+export function RowToggle({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <button onClick={onToggle} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left">
+      {children}
+      <ChevronIcon size={16} className={`shrink-0 text-muted transition-transform ${open ? "-rotate-90" : "rotate-90"}`} />
+    </button>
   );
 }
 
 function LinkRow({ task }: { task: Extract<TodayTask, { kind: "rescue" | "checkin" }> }) {
-  const href = task.kind === "rescue" ? `/plants/${task.plantId}/rescue` : `/plants/${task.plantId}/checkin`;
-  const title = task.kind === "rescue" ? task.text : "Take this week's photo";
+  const rescue = task.kind === "rescue";
   return (
     <Link
-      href={href}
-      className={`flex items-center gap-3 rounded-2xl border bg-surface p-3 ${task.kind === "rescue" ? "border-terracotta" : "border-border"}`}
+      href={rescue ? `/plants/${task.plantId}/rescue` : `/plants/${task.plantId}/checkin`}
+      className="flex items-center gap-3 px-3 py-2.5 hover:bg-background"
     >
-      <Thumb url={task.photoUrl} />
-      <div className="min-w-0 flex-1">
-        <Meta task={task} />
-        <p className="mt-1 font-medium">{title}</p>
-      </div>
-      <ChevronIcon size={18} className="shrink-0 text-muted" />
+      <RowText
+        url={task.photoUrl}
+        title={rescue ? task.text : "Take this week's photo"}
+        sub={`${rescue ? "🚨" : "📸"} ${task.nickname}`}
+        titleClass={rescue ? "text-terracotta" : ""}
+      />
+      <ChevronIcon size={16} className="shrink-0 text-muted" />
     </Link>
   );
 }
 
 function WaterRow({ task }: { task: Extract<TodayTask, { kind: "water" }> }) {
   const { answer, busy, result, error, hidden } = useWaterAnswer(task.taskId, task.nickname);
+  const [open, setOpen] = useState(false);
   const [more, setMore] = useState(false);
-  const due = dueLabel(new Date(task.dueAt));
   if (hidden) return null;
+  const due = task.overdue ? <span className="text-terracotta">{dueLabel(new Date(task.dueAt))}</span> : "today";
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-3">
-      <div className="flex items-center gap-3">
-        <Thumb url={task.photoUrl} />
-        <div className="min-w-0 flex-1">
-          <Meta task={task} extra={task.overdue && <span className="text-terracotta">{due}</span>} />
-          <p className="mt-1 font-medium">{task.title}</p>
-        </div>
+    <div>
+      <div className="flex pr-3">
+        <RowToggle open={open || !!result} onToggle={() => setOpen(!open)}>
+          <RowText url={task.photoUrl} title={task.title} sub={<>💧 {task.nickname} · {due}</>} />
+        </RowToggle>
       </div>
-
       {result ? (
-        <p role="status" className="mt-3 rounded-xl bg-leaf-soft p-3 text-sm">
+        <p role="status" className="mx-3 mb-3 rounded-xl bg-leaf-soft p-3 text-sm">
           {result}
         </p>
       ) : (
-        <>
-          <p className="mt-3 text-sm text-muted">First push a finger 2–3 cm into the soil. Is it dry?</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <button
-              disabled={busy}
-              onClick={() => answer("dry")}
-              className="rounded-full bg-leaf px-3 py-2.5 text-sm font-medium text-background disabled:opacity-50"
-            >
-              Dry, I watered it
-            </button>
-            <button
-              disabled={busy}
-              onClick={() => answer("damp")}
-              className="rounded-full border border-border px-3 py-2.5 text-sm font-medium disabled:opacity-50"
-            >
-              Still damp
-            </button>
-          </div>
-          {more ? (
-            <div className="mt-2 flex flex-wrap justify-between gap-x-4 text-sm text-muted">
-              <button disabled={busy} onClick={() => answer("dry_drooping")} className="py-1 underline-offset-2 hover:underline">
-                Bone dry &amp; droopy, watered it
+        open && (
+          <div className="px-3 pb-3 pl-16">
+            <p className="text-sm text-muted">First push a finger 2–3 cm into the soil. Is it dry?</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                disabled={busy}
+                onClick={() => answer("dry")}
+                className="rounded-full bg-leaf px-3 py-2 text-sm font-medium text-background disabled:opacity-50"
+              >
+                Dry, I watered it
               </button>
-              <button disabled={busy} onClick={() => answer("snooze")} className="py-1 underline-offset-2 hover:underline">
-                Remind me tomorrow
+              <button
+                disabled={busy}
+                onClick={() => answer("damp")}
+                className="rounded-full border border-border px-3 py-2 text-sm font-medium disabled:opacity-50"
+              >
+                Still damp
               </button>
             </div>
-          ) : (
-            <button onClick={() => setMore(true)} className="mt-2 py-1 text-sm text-muted underline-offset-2 hover:underline">
-              Other answers…
-            </button>
-          )}
-          {task.detail && <p className="mt-1 text-xs text-muted">{task.detail}</p>}
-        </>
+            {more ? (
+              <div className="mt-1 flex flex-wrap justify-between gap-x-4 text-sm text-muted">
+                <button disabled={busy} onClick={() => answer("dry_drooping")} className="py-1 underline-offset-2 hover:underline">
+                  Bone dry &amp; droopy, watered it
+                </button>
+                <button disabled={busy} onClick={() => answer("snooze")} className="py-1 underline-offset-2 hover:underline">
+                  Remind me tomorrow
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setMore(true)} className="mt-1 py-1 text-sm text-muted underline-offset-2 hover:underline">
+                Other answers…
+              </button>
+            )}
+            {task.detail && <p className="mt-1 text-xs text-muted">{task.detail}</p>}
+          </div>
+        )
       )}
       {error && (
-        <p role="alert" className="mt-2 text-sm text-bad">
+        <p role="alert" className="px-3 pb-3 text-sm text-bad">
           {error}
         </p>
       )}
@@ -159,36 +161,10 @@ function WaterRow({ task }: { task: Extract<TodayTask, { kind: "water" }> }) {
   );
 }
 
-function StepGroup({ steps }: { steps: StepTask[] }) {
-  const first = steps[0];
-  return (
-    <div className="rounded-2xl border border-border bg-surface p-3">
-      <div className="flex items-center gap-3">
-        <Thumb url={first.photoUrl} />
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 text-xs">
-            <span className={`rounded-full px-2 py-0.5 font-medium ${LABELS.step.className}`}>{LABELS.step.text}</span>
-            <span className="text-muted">
-              {steps.length} from the last health check
-            </span>
-          </p>
-          <Link href={`/plants/${first.plantId}`} className="mt-0.5 block py-0.5 font-medium hover:underline">
-            {first.nickname}
-          </Link>
-        </div>
-      </div>
-      <ul className="mt-2 divide-y divide-border">
-        {steps.map((t) => (
-          <StepLine key={t.key} task={t} />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function StepLine({ task }: { task: StepTask }) {
+function StepRow({ task }: { task: StepTask }) {
   const router = useRouter();
   const toast = useToast();
+  const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancel = useRef<(() => void) | null>(null);
@@ -211,7 +187,7 @@ function StepLine({ task }: { task: StepTask }) {
     setDone(next);
     if (toast && next) {
       cancel.current = toast.defer({
-        message: `Done: ${task.step}`,
+        message: `Done: ${task.title}`,
         run: async () => {
           cancel.current = null;
           const res = await save(true, true);
@@ -242,36 +218,40 @@ function StepLine({ task }: { task: StepTask }) {
   }
 
   return (
-    <li className="py-2.5 first:pt-3 last:pb-0.5">
-      <div className="flex gap-3">
+    <div>
+      <div className="flex items-center">
+        <RowToggle open={open} onToggle={() => setOpen(!open)}>
+          <RowText url={task.photoUrl} title={task.title} sub={`✓ ${task.nickname}`} titleClass={done ? "text-muted line-through" : ""} />
+        </RowToggle>
         <button
           onClick={toggle}
           role="checkbox"
           aria-checked={done}
-          aria-label={`Done: ${task.step}`}
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-            done ? "border-leaf bg-leaf text-background" : "border-border text-transparent hover:border-leaf"
-          }`}
+          aria-label={`Done: ${task.title}`}
+          className="flex h-12 w-12 shrink-0 items-center justify-center"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M5 12.5l4.5 4.5L19 7.5" />
-          </svg>
+          <span
+            className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors ${
+              done ? "border-leaf bg-leaf text-background" : "border-border text-transparent hover:border-leaf"
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </span>
         </button>
-        <div className="min-w-0 flex-1">
-          <p className={done ? "text-muted line-through" : ""}>{task.step}</p>
-          {task.why && !done && (
-            <details className="mt-0.5 text-sm text-muted">
-              <summary className="cursor-pointer select-none">Why?</summary>
-              <p className="mt-1">{task.why}</p>
-            </details>
-          )}
-          {error && (
-            <p role="alert" className="mt-1 text-sm text-bad">
-              {error}
-            </p>
-          )}
-        </div>
       </div>
-    </li>
+      {open && (
+        <div className="px-3 pb-3 pl-16 text-sm">
+          <p>{task.step}</p>
+          {task.why && <p className="mt-1 text-muted">Why: {task.why}</p>}
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="px-3 pb-3 text-sm text-bad">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

@@ -4,8 +4,8 @@ import { RepottedButton } from "./repotted-button";
 
 type Milestone = { type: string; target_date: string; details: unknown };
 
-const monthYear = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" });
-const dayMonth = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+const monthYear = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+const dayMonth = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "long" });
 
 /** Long-term plan: next repot window and feeding season (plan F5). */
 export function PlanSection({
@@ -29,7 +29,7 @@ export function PlanSection({
   const f = feed?.details as { start: string; end: string; active: boolean } | undefined;
   const lastFed = lastFedAt ? new Date(lastFedAt) : null;
   const nextFeed = lastFed ? new Date(lastFed.getTime() + FEED_EVERY_DAYS * 86_400_000) : null;
-  const shortDate = (d: Date) => d.toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  const shortDate = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
 
   return (
     <section className="mt-10">

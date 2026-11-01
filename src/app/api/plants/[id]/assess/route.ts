@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { assessPlant, AssessmentError, ASSESS_MODEL, type AssessPhoto } from "@/lib/ai/assess";
-import { needsEmergency } from "@/lib/ai/schemas";
+import { needsEmergency, parseAssessment } from "@/lib/ai/schemas";
 import { careLogText } from "@/lib/care/log";
+import { tipAnswerText } from "@/lib/care/tips";
 import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { rescueDay, SYMPTOMS } from "@/lib/care/rescue";
 import { initialWaterDueAt, wateringIntervalDays, waterAmountMl, type Hemisphere } from "@/lib/care/watering";
@@ -20,6 +21,8 @@ export const maxDuration = 120;
 
 /** How far back the owner's care log goes in the AI's context. */
 const CARE_LOG_DAYS = 14;
+/** Tip answers go further back: "done" quiets a topic for 4 weeks, and the notes stay useful. */
+const TIP_ANSWER_DAYS = 120;
 
 const bodySchema = z.object({
   photos: z
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
 
     await consumeAiQuota(userId);
 
-    const [{ data: profile }, { data: previous }, { data: activeRescue }, { data: recentCare }] = await Promise.all([
+    const [{ data: profile }, { data: previous }, { data: activeRescue }, { data: recentCare }, { data: recentTips }] = await Promise.all([
       supabase.from("profiles").select("hemisphere, latitude, location_name, timezone").eq("id", userId).maybeSingle(),
       supabase
         .from("assessments")
@@ -82,6 +85,13 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
         .eq("plant_id", plantId)
         .gte("done_at", new Date(Date.now() - CARE_LOG_DAYS * 86_400_000).toISOString())
         .order("done_at", { ascending: false })
+        .limit(10),
+      supabase
+        .from("tip_answers")
+        .select("action_index, topic, answer, note, answered_at, assessment:assessments(raw)")
+        .eq("plant_id", plantId)
+        .gte("answered_at", new Date(Date.now() - TIP_ANSWER_DAYS * 86_400_000).toISOString())
+        .order("answered_at", { ascending: false })
         .limit(10),
     ]);
     // A check-in during a rescue is always an emergency follow-up.
@@ -107,6 +117,19 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       symptoms: parsed.data.symptoms,
       note: parsed.data.note || null,
       careLog: careLogText(recentCare ?? []),
+      tipAnswers: (recentTips ?? []).map((t) => {
+        const source = Array.isArray(t.assessment) ? t.assessment[0] : t.assessment;
+        const action = source ? parseAssessment(source.raw)?.actions[t.action_index] : undefined;
+        return tipAnswerText({
+          assessmentId: "",
+          index: t.action_index,
+          topic: t.topic,
+          answer: t.answer,
+          note: t.note,
+          answeredAt: new Date(t.answered_at),
+          title: action?.title ?? t.topic,
+        });
+      }),
       rescue: activeRescue
         ? {
             day: rescueDay(new Date(activeRescue.started_at), now, profile?.timezone ?? "UTC"),

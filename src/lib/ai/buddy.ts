@@ -8,7 +8,7 @@ import { daylightHours, windowDirectionName, type WindowDirection } from "@/lib/
 import { dueLabel } from "@/lib/plants/format";
 import { createAdminClient } from "@/lib/supabase/server";
 import { AssessmentError, aiFailure } from "./ai-errors";
-import { assessmentSchema, buddyReplySchema, type BuddyReply } from "./schemas";
+import { buddyReplySchema, parseAssessment, type BuddyReply } from "./schemas";
 
 // Opus 5.5 at low effort keeps chat replies quick; CHAT_MODEL can override.
 export const CHAT_MODEL = process.env.CHAT_MODEL ?? "claude-opus-5-5";
@@ -91,7 +91,7 @@ export async function plantContext(userId: string, now = new Date()): Promise<st
   for (const p of details ?? []) {
     const species = Array.isArray(p.species) ? p.species[0] : p.species;
     const latest = checks?.find((c) => c.plant_id === p.id);
-    const a = latest ? assessmentSchema.safeParse(latest.raw).data : undefined;
+    const a = latest ? parseAssessment(latest.raw) : undefined;
     const water = tasks?.find((t) => t.plant_id === p.id);
     const repot = milestones?.find((m) => m.plant_id === p.id && m.type === "repot");
     const rescue = rescues?.find((r) => r.plant_id === p.id);

@@ -9,11 +9,13 @@ import { TelegramCard } from "@/components/telegram-card";
 import { ProgressRing } from "@/components/today/progress-ring";
 import { LogCareButton } from "@/components/today/log-care-button";
 import { TaskList } from "@/components/today/task-list";
-import { assessmentSchema } from "@/lib/ai/schemas";
+import { TipList } from "@/components/today/tip-list";
+import { parseAssessment, type ScoreKey } from "@/lib/ai/schemas";
 import { needsCheckin } from "@/lib/care/plan";
 import { rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { endOfLocalDay } from "@/lib/care/schedule";
-import { comingUp, dayLabel, daysAhead, greeting, longDate, orderTasks, type ComingUp, type TodayTask } from "@/lib/care/today";
+import { comingUp, dayLabel, daysAhead, greeting, longDate, orderTasks, type ComingUp, type TodayTask, type TodayTip } from "@/lib/care/today";
+import { showTip, type TipAnswer } from "@/lib/care/tips";
 import { loadTrip, type TripView } from "@/lib/care/vacation.server";
 import { pictureUrl, PICTURE_ONLY_FILTER } from "@/lib/plants/pictures";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
@@ -22,8 +24,10 @@ import { createClient } from "@/lib/supabase/server";
 const isConfigured = () =>
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-/** Steps from checks older than this no longer show on Today. */
+/** To-dos from checks older than this no longer show on Today. */
 const STEP_MAX_AGE_DAYS = 14;
+/** Tips last longer: they're about where and how the plant lives. */
+const TIP_MAX_AGE_DAYS = 60;
 
 type PlantChip = { id: string; nickname: string; potCm: number; photoUrl: string | null; health: number | null; urgent: boolean };
 
@@ -46,7 +50,7 @@ export default async function Home() {
   const tz = profile?.timezone ?? "UTC";
   const now = new Date();
   const header = { greeting: greeting(tz, now, profile?.display_name), date: longDate(tz, now) };
-  if (!plants?.length) return <Today header={header} tz={tz} now={now} plants={[]} tasks={[]} done={0} coming={[]} trip={null} />;
+  if (!plants?.length) return <Today header={header} tz={tz} now={now} plants={[]} tasks={[]} tips={[]} done={0} coming={[]} trip={null} />;
 
   const ids = plants.map((p) => p.id);
   const coverOf = (p: (typeof plants)[number]) => (Array.isArray(p.cover) ? p.cover[0] : p.cover) as { storage_path: string; kind: string } | null;
@@ -64,6 +68,7 @@ export default async function Home() {
     { data: rescuePlans },
     { data: doneEvents },
     { data: repots },
+    { data: tipRows },
   ] = await Promise.all([
     loadTrip(supabase, userId, now),
     supabase.from("assessments").select("id, plant_id, health, raw, created_at").in("plant_id", ids).order("created_at", { ascending: false }),
@@ -87,6 +92,7 @@ export default async function Home() {
     // Waterings and ticked steps since local midnight, for today's progress.
     supabase.from("care_events").select("id").in("plant_id", ids).gte("done_at", startOfToday.toISOString()),
     supabase.from("milestones").select("plant_id, target_date").in("plant_id", ids).eq("type", "repot").is("done_at", null),
+    supabase.from("tip_answers").select("plant_id, assessment_id, action_index, topic, answer, note, answered_at").in("plant_id", ids),
   ]);
 
   // Sorted lists, so the first entry per plant is the latest check / photo / soonest watering.
@@ -139,16 +145,36 @@ export default async function Home() {
     if (needsCheckin(last ? new Date(last.taken_at) : null, now)) todo.push({ kind: "checkin", key: `c${p.id}`, ...plantBits(p.id) });
   }
 
-  // The AI's recent steps that aren't ticked yet (watering has its own reminder above).
-  const recent = [...latest.values()].filter((a) => now.getTime() - new Date(a.created_at).getTime() < STEP_MAX_AGE_DAYS * 86_400_000);
+  // The AI's recent to-dos that aren't ticked yet (watering has its own reminder above), and its tips.
+  const age = (a: { created_at: string }) => now.getTime() - new Date(a.created_at).getTime();
+  const recent = [...latest.values()].filter((a) => age(a) < TIP_MAX_AGE_DAYS * 86_400_000);
   const { data: ticks } = recent.length
     ? await supabase.from("care_events").select("assessment_id, action_index").in("assessment_id", recent.map((a) => a.id))
     : { data: [] };
   const ticked = new Set((ticks ?? []).map((t) => `${t.assessment_id}:${t.action_index}`));
+  const answers = (tipRows ?? []).map((r) => ({
+    plantId: r.plant_id,
+    assessmentId: r.assessment_id,
+    index: r.action_index,
+    topic: r.topic,
+    answer: r.answer,
+    note: r.note,
+    answeredAt: new Date(r.answered_at),
+  })) satisfies (TipAnswer & { plantId: string })[];
+  const tips: TodayTip[] = [];
   for (const a of recent) {
-    (assessmentSchema.safeParse(a.raw).data?.actions ?? []).forEach((act, index) => {
-      if (act.taskType === "water" || ticked.has(`${a.id}:${index}`)) return;
-      todo.push({ kind: "step", key: `s${a.id}:${index}`, ...plantBits(a.plant_id), assessmentId: a.id, index, step: act.step, why: act.why });
+    const parsed = parseAssessment(a.raw);
+    if (!parsed) continue;
+    const scores = Object.fromEntries(Object.entries(parsed.scores).map(([k, v]) => [k, v.value])) as Record<ScoreKey, number>;
+    const plantAnswers = answers.filter((x) => x.plantId === a.plant_id);
+    parsed.actions.forEach((act, index) => {
+      const bits = { ...plantBits(a.plant_id), assessmentId: a.id, index, title: act.title, step: act.step, why: act.why };
+      if (act.kind === "tip") {
+        if (showTip({ assessmentId: a.id, index, topic: act.taskType }, plantAnswers, scores, now)) tips.push({ key: `t${a.id}:${index}`, ...bits });
+        return;
+      }
+      if (act.taskType === "water" || ticked.has(`${a.id}:${index}`) || age(a) >= STEP_MAX_AGE_DAYS * 86_400_000) return;
+      todo.push({ kind: "step", key: `s${a.id}:${index}`, ...bits });
     });
   }
 
@@ -173,6 +199,7 @@ export default async function Home() {
       tz={tz}
       now={now}
       tasks={orderTasks(todo)}
+      tips={tips}
       done={(doneEvents?.length ?? 0) + checkinsToday}
       coming={coming}
       trip={trip}
@@ -194,6 +221,7 @@ function Today({
   now,
   plants,
   tasks,
+  tips,
   done,
   coming,
   trip,
@@ -203,6 +231,7 @@ function Today({
   now: Date;
   plants: PlantChip[];
   tasks: TodayTask[];
+  tips: TodayTip[];
   done: number;
   coming: ComingUp[];
   trip: TripView | null;
@@ -246,6 +275,15 @@ function Today({
             </section>
           ) : (
             <AllDone done={done} next={coming[0]} tz={tz} now={now} />
+          )}
+          {tips.length > 0 && (
+            <section className="mt-6" aria-labelledby="tips-heading">
+              <h2 id="tips-heading" className="mb-3 flex items-baseline justify-between text-lg font-semibold">
+                Tips
+                <span className="text-sm font-normal text-muted">from health checks</span>
+              </h2>
+              <TipList tips={tips} />
+            </section>
           )}
           <LogCareButton plants={plants} />
 

@@ -30,9 +30,23 @@ export type TodayTask =
       photoUrl: string | null;
       assessmentId: string;
       index: number;
+      title: string;
       step: string;
       why: string;
     };
+
+/** One of the AI's tips: a one-off change, answered with done / can't / later instead of ticked. */
+export type TodayTip = {
+  key: string;
+  plantId: string;
+  nickname: string;
+  photoUrl: string | null;
+  assessmentId: string;
+  index: number;
+  title: string;
+  step: string;
+  why: string;
+};
 
 const ORDER = { rescue: 0, water: 1, checkin: 2, step: 3 } as const;
 

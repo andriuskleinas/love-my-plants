@@ -36,6 +36,8 @@ export interface AssessContext {
   note?: string | null;
   /** What the owner did lately ("2026-10-11: Watered · soil was dry"), newest first. */
   careLog?: string[];
+  /** The owner's answers to earlier tips ("2026-11-01 light tip 'Move closer…': done — note"), newest first. */
+  tipAnswers?: string[];
   /** During an active rescue: where we are and what was done. */
   rescue?: { day: number; diagnosis: string[]; doneSteps: string[]; missedSteps: string[] } | null;
 }
@@ -67,8 +69,12 @@ If a photo needed for a score is missing (e.g. no soil close-up), estimate from 
 - Be honest but kind. Never invent problems; only report issues you can see evidence of. Use confidence < 0.6 when unsure; the app shows those as "possible".
 - If the photos are too blurry, dark, cropped, or don't show a plant, set photoQuality.ok=false with one specific retake hint (e.g. "Step back so the whole plant and pot are in frame"). Still fill every field with your best guess.
 - species: up to 3 guesses, most likely first, with scientific and common names.
-- actions: at most 3, most important first, each one short concrete step a beginner can do today with real-world units ("Water about 250 ml (one glass) slowly until it drains, then empty the saucer"). If nothing is needed today, give one reassuring action like "No water today — we'll remind you when it's time".
+- actions: at most 3, most important first, each one a short concrete step a beginner can follow, with real-world units ("Water about 250 ml (one glass) slowly until it drains, then empty the saucer"). Only include what is actually needed; if nothing is, return no actions (the app says "nothing to do" itself — never add "No water today"-style reassurance).
+  - kind "todo": a small task for today that takes a few minutes (water, wipe the leaves, trim a brown leaf, check under the leaves for pests, rotate the pot, feed).
+  - kind "tip": a one-off change to where or how the plant lives, done once rather than today (move to a brighter or shadier spot, repot when convenient, add a pebble tray or humidifier, get a grow light, change the soil mix).
+  - title: 2–5 words starting with a verb, at most 40 characters, so it fits on one line ("Move closer to the window", "Trim the brown tips"). The full instruction goes in step.
 - Care log: the request may list care the owner already did lately. Don't repeat a step they did in the last few days (e.g. no watering step the day after they watered) unless the photos clearly show it's needed again.
+- Tip answers: the request may list the owner's answers to earlier tips, with their notes ("done: this is the sunniest spot in my home", "can't: no space near the window"). Never repeat a tip they answered in the last 4 weeks. After that, raise the same topic only if the photos clearly still show the problem, and then suggest something different from what they did or said isn't possible (e.g. a grow light instead of moving it again).
 - Watering: whenever a step says to water, use exactly the amount given in the request. Never promise a number of days until the next watering; the app's reminders handle timing and learn from the owner's feedback.
 - estimatedHeightCm: estimate plant height above the soil, using the pot diameter given as scale. null if impossible.
 - repotSignals: rootsVisible only if roots are visible at the drainage holes or soil surface; drainsTooFast only if there is visible evidence.
@@ -106,6 +112,7 @@ function contextText(ctx: AssessContext): string {
   if (ctx.symptoms?.length) lines.push(`Owner reports: ${ctx.symptoms.join(", ")}`);
   if (ctx.note) lines.push(`Owner's note: "${ctx.note.replace(/"/g, "'")}"`);
   if (ctx.careLog?.length) lines.push(`Owner's care log, newest first: ${ctx.careLog.join(" | ")}`);
+  if (ctx.tipAnswers?.length) lines.push(`Owner's answers to earlier tips, newest first: ${ctx.tipAnswers.join(" | ")}`);
   if (ctx.rescue) {
     lines.push(
       `Active rescue, day ${ctx.rescue.day}. Earlier diagnosis: ${ctx.rescue.diagnosis.join("; ")}.`,

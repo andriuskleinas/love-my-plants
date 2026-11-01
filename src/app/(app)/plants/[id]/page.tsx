@@ -5,9 +5,10 @@ import { PlantPicture } from "@/components/plant-picture";
 import { BackIcon, ImageIcon, PencilIcon, TrendIcon } from "@/components/icons";
 import { HealthBadge, ReportCard, scoreTone } from "@/components/report-card";
 import { StepList } from "@/components/step-list";
+import { TipList, type TipItem } from "@/components/today/tip-list";
 import { Timelapse, type Frame } from "@/components/timelapse";
 import { WaterCard } from "@/components/water-card";
-import { assessmentSchema } from "@/lib/ai/schemas";
+import { parseAssessment } from "@/lib/ai/schemas";
 import { careEmoji, careEventText } from "@/lib/care/log";
 import { needsCheckin } from "@/lib/care/plan";
 import { planLength, rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
@@ -72,11 +73,20 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     ? (await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(cover.storage_path, 3600)).data?.signedUrl
     : null;
   const coverUrl = cover && coverSigned ? pictureUrl(coverSigned, cover.kind) : null;
-  const assessment = latest ? assessmentSchema.safeParse(latest.raw) : null;
+  const assessment = latest ? parseAssessment(latest.raw) : undefined;
 
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub ?? "";
-  const [{ data: profile }, { data: ticks }, { data: history }, { data: photos }, milestonesResult, { data: careLog }, { data: lastFed }] = await Promise.all([
+  const [
+    { data: profile },
+    { data: ticks },
+    { data: history },
+    { data: photos },
+    milestonesResult,
+    { data: careLog },
+    { data: lastFed },
+    { data: tipAnswers },
+  ] = await Promise.all([
     supabase.from("profiles").select("timezone, hemisphere").eq("id", userId).maybeSingle(),
     latest
       ? supabase.from("care_events").select("action_index").eq("assessment_id", latest.id)
@@ -106,6 +116,9 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
       .order("done_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    latest
+      ? supabase.from("tip_answers").select("action_index, answer, note").eq("assessment_id", latest.id)
+      : Promise.resolve({ data: [] as { action_index: number; answer: "done" | "cant" | "later"; note: string | null }[] }),
   ]);
   const { data: rescue } = await supabase
     .from("rescue_plans")
@@ -147,8 +160,31 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     waterTask && new Date(waterTask.due_at).getTime() < endOfLocalDay(profile?.timezone ?? "UTC", new Date()).getTime();
   const ticked = new Set((ticks ?? []).map((t) => t.action_index));
 
+  const answerByIndex = new Map((tipAnswers ?? []).map((a) => [a.action_index, a]));
+  const actions = (assessment?.actions ?? []).map((a, index) => ({ ...a, index }));
+  const todos = actions
+    .filter((a) => a.kind === "todo")
+    .map((a) => ({ index: a.index, step: a.step, why: a.why, done: ticked.has(a.index) }));
+  const tips: TipItem[] = actions
+    .filter((a) => a.kind === "tip")
+    .map((a) => {
+      const answer = answerByIndex.get(a.index);
+      return {
+        key: `t${a.index}`,
+        plantId: plant.id,
+        nickname: plant.nickname,
+        photoUrl: null,
+        assessmentId: latest!.id,
+        index: a.index,
+        title: a.title,
+        step: a.step,
+        why: a.why,
+        answered: answer ? { answer: answer.answer, note: answer.note } : null,
+      };
+    });
+
   const tz = profile?.timezone ?? "UTC";
-  const health = assessment?.success ? assessment.data.scores.health : null;
+  const health = assessment ? assessment.scores.health : null;
   const previousHealth = history && history.length > 1 ? history.at(-2)!.health : null;
   const trend = health ? healthTrend(health.value, previousHealth) : null;
   const tone = health ? scoreTone(health.value) : null;
@@ -287,23 +323,26 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
           )}
 
           <div className="mt-6">
-            {assessment?.success ? (
+            {assessment ? (
               <ReportCard
                 showHealth={false}
-                scores={assessment.data.scores}
-                issues={assessment.data.issues}
-                actions={assessment.data.actions}
+                scores={assessment.scores}
+                issues={assessment.issues}
+                actions={assessment.actions}
                 today={
-                  <StepList
-                    plantId={plant.id}
-                    assessmentId={latest!.id}
-                    items={assessment.data.actions.map((a, index) => ({
-                      index,
-                      step: a.step,
-                      why: a.why,
-                      done: ticked.has(index),
-                    }))}
-                  />
+                  <>
+                    {todos.length > 0 ? (
+                      <StepList plantId={plant.id} assessmentId={latest!.id} items={todos} />
+                    ) : (
+                      <p className="rounded-2xl bg-leaf-soft p-3 text-sm">Nothing else to do today.</p>
+                    )}
+                    {tips.length > 0 && (
+                      <div className="mt-5">
+                        <h3 className="mb-2 font-semibold">Tips</h3>
+                        <TipList tips={tips} onPlantPage />
+                      </div>
+                    )}
+                  </>
                 }
               />
             ) : (

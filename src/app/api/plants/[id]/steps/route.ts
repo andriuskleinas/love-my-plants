@@ -1,7 +1,7 @@
 import { MESSAGES } from "@/lib/errors";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { assessmentSchema } from "@/lib/ai/schemas";
+import { parseAssessment } from "@/lib/ai/schemas";
 import { memberIdFor } from "@/lib/care/tasks.server";
 import { errorResponse, HttpError, requireUserId } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
@@ -39,9 +39,9 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
       .eq("id", assessmentId)
       .eq("plant_id", plantId)
       .maybeSingle();
-    const action = row ? assessmentSchema.safeParse(row.raw).data?.actions[index] : undefined;
+    const action = row ? parseAssessment(row.raw)?.actions[index] : undefined;
     const plant = Array.isArray(row?.plant) ? row.plant[0] : row?.plant;
-    if (!action || !plant) throw new HttpError(404, "This step is no longer available. Refresh the page.");
+    if (!action || action.kind !== "todo" || !plant) throw new HttpError(404, "This step is no longer available. Refresh the page.");
 
     const { error } = await supabase.from("care_events").upsert(
       {

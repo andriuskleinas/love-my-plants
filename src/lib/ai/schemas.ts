@@ -43,11 +43,22 @@ export const issueSchema = z.object({
   confidence,
 });
 
+export const ACTION_KINDS = ["todo", "tip"] as const;
+export type ActionKind = (typeof ACTION_KINDS)[number];
+export const TASK_TYPES = ["water", "light", "prune", "repot", "fertilize", "pests", "clean", "rotate", "mist", "other"] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+export const TITLE_MAX = 40;
+
 export const actionSchema = z.object({
+  /** "todo": a few minutes' task for today. "tip": a one-off change to where or how the plant lives. */
+  kind: z.enum(ACTION_KINDS),
+  /** Short label for compact lists, e.g. "Move closer to the window". */
+  title: z.string().min(1).max(TITLE_MAX),
   step: z.string().min(1).max(200),
   why: z.string().max(300),
-  taskType: z.enum(["water", "light", "prune", "repot", "fertilize", "pests", "clean", "rotate", "mist", "other"]),
+  taskType: z.enum(TASK_TYPES),
 });
+export type Action = z.infer<typeof actionSchema>;
 
 export const rescueStepSchema = z.object({
   day: z.number().int().min(1).max(30),
@@ -96,6 +107,36 @@ export const assessmentSchema = z.object({
     .nullable(),
 });
 export type Assessment = z.infer<typeof assessmentSchema>;
+
+// Checks saved before advice had a kind and title.
+const storedAssessmentSchema = assessmentSchema.extend({
+  actions: z.array(actionSchema.extend({ kind: actionSchema.shape.kind.optional(), title: z.string().optional() })).max(3),
+});
+
+/** Moving, repotting and "when convenient" advice is a one-off change, not today's task. */
+export function legacyKind(action: { step: string; taskType: TaskType }): ActionKind {
+  if (action.taskType === "light" || action.taskType === "repot") return "tip";
+  if (/^(don['’]t|do not|no more|avoid|keep)\b/i.test(action.step)) return "tip";
+  return /\b(when convenient|consider|if possible|over the (next|coming)|in spring)\b/i.test(action.step) ? "tip" : "todo";
+}
+
+/** The first phrase of the step, cut at a word: "Move the plant to within 1 m of the…" */
+export function shortTitle(step: string): string {
+  const first = step.split(/(?<=[.;:!?])\s|\s[—–]\s|,\s/)[0].replace(/[.;:!?,]+$/, "").trim();
+  if (first.length <= TITLE_MAX) return first;
+  const cut = first.slice(0, TITLE_MAX - 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : cut.length).trimEnd()}…`;
+}
+
+/** A saved check's AI output, with older checks' advice given a kind and title. */
+export function parseAssessment(raw: unknown): Assessment | undefined {
+  const parsed = storedAssessmentSchema.safeParse(raw);
+  if (!parsed.success) return undefined;
+  return {
+    ...parsed.data,
+    actions: parsed.data.actions.map((a) => ({ ...a, kind: a.kind ?? legacyKind(a), title: a.title || shortTitle(a.step) })),
+  };
+}
 
 export const shopVerdictSchema = z.object({
   product: z.string(),

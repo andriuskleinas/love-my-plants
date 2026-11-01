@@ -16,7 +16,7 @@ type Member = {
   plants: string[];
 };
 
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
+const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "");
 
 /** Share sheet on phones, clipboard elsewhere. */
 async function shareLink(url: string, text: string): Promise<string> {

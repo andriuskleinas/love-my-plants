@@ -27,13 +27,31 @@ export function HealthBadge({ value, size = "md" }: { value: number; size?: "md"
   );
 }
 
+/** Right after a check: today's to-dos, numbered, then the tips. */
 export function TodaySteps({ actions }: Pick<Assessment, "actions">) {
+  const todos = actions.filter((a) => a.kind === "todo");
+  const tips = actions.filter((a) => a.kind === "tip");
+  return (
+    <div className="space-y-5">
+      {todos.length > 0 ? <ActionList actions={todos} /> : <p className="rounded-2xl bg-leaf-soft p-3 text-sm">Nothing to do today.</p>}
+      {tips.length > 0 && (
+        <div>
+          <h3 className="mb-2 font-semibold">Tips</h3>
+          <ActionList actions={tips} tips />
+          <p className="mt-2 text-sm text-muted">Answer tips on Today or the plant&apos;s page, so they don&apos;t come back.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ActionList({ actions, tips = false }: Pick<Assessment, "actions"> & { tips?: boolean }) {
   return (
     <ol className="space-y-3">
       {actions.map((a, i) => (
         <li key={i} className="flex gap-3 rounded-2xl border border-border bg-surface p-4">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-leaf-soft text-sm font-semibold text-leaf">
-            {i + 1}
+            {tips ? "💡" : i + 1}
           </span>
           <div className="min-w-0">
             <p className="font-medium">{a.step}</p>

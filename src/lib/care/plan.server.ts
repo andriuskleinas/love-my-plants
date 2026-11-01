@@ -1,5 +1,5 @@
 import "server-only";
-import { assessmentSchema } from "@/lib/ai/schemas";
+import { parseAssessment } from "@/lib/ai/schemas";
 import { createAdminClient } from "@/lib/supabase/server";
 import { feedingSeason } from "./plan";
 import { evaluateRepot } from "./repot";
@@ -38,7 +38,7 @@ export async function refreshPlantPlan(plantId: string, hemisphere: Hemisphere, 
   ]);
   if (!plant) return;
 
-  const assessment = latest ? assessmentSchema.safeParse(latest.raw).data : undefined;
+  const assessment = latest ? parseAssessment(latest.raw) : undefined;
   const species = Array.isArray(plant.species) ? plant.species[0] : plant.species;
   const repot = evaluateRepot({
     now,
