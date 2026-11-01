@@ -3,10 +3,29 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertIcon, CameraIcon, CloseIcon, DotsIcon, DropIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { AlertIcon, CameraIcon, CloseIcon, DotsIcon, DropIcon, ImageIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { callApi } from "@/lib/api-client";
 import type { LogType } from "@/lib/care/log";
 import { LogCareSheet, useLogCareRequests } from "@/components/log-care-sheet";
+import { PictureSheet, type PicturePhoto } from "./picture-sheet";
+
+const OPEN_EVENT = "plant:open-sheet";
+type SheetRequest = "rename" | "picture";
+
+/** A button in the server-rendered page that opens the rename form or the picture chooser. */
+export function OpenSheetButton({ sheet, className, children, ...rest }: { sheet: SheetRequest } & React.ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      onClick={() => window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: sheet }))}
+      className={className}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+}
 
 type Props = {
   plantId: string;
@@ -17,17 +36,35 @@ type Props = {
   waterDue: boolean;
   /** "start" when there's no rescue plan yet, "open" during one. */
   rescue: "start" | "open";
+  picture: {
+    homeId: string;
+    speciesName: string | null;
+    photos: PicturePhoto[];
+    currentId: string | null;
+    pinned: boolean;
+    canCutOut: boolean;
+  };
 };
 
 /** The plant page's main actions, kept within thumb reach at the bottom of the screen. */
-export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, rescue }: Props) {
-  const [menu, setMenu] = useState(false);
+export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, rescue, picture }: Props) {
+  const [menu, setMenu] = useState<MenuMode | null>(null);
+  const [pictureOpen, setPictureOpen] = useState(false);
   const [log, setLog] = useState<{ type: LogType | null } | null>(null);
   const openLog = (type: LogType | null) => {
-    setMenu(false);
+    setMenu(null);
     setLog({ type });
   };
+  const openPicture = () => {
+    setMenu(null);
+    setPictureOpen(true);
+  };
   useLogCareRequests(openLog);
+  useEffect(() => {
+    const listener = (e: Event) => ((e as CustomEvent<SheetRequest>).detail === "picture" ? openPicture() : setMenu("rename"));
+    window.addEventListener(OPEN_EVENT, listener);
+    return () => window.removeEventListener(OPEN_EVENT, listener);
+  }, []);
   const plants = useMemo(() => [{ id: plantId, nickname, potCm }], [plantId, nickname, potCm]);
   return (
     <>
@@ -73,7 +110,7 @@ export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, r
           )}
           <button
             type="button"
-            onClick={() => setMenu(true)}
+            onClick={() => setMenu("menu")}
             aria-label={`More for ${nickname}`}
             aria-haspopup="dialog"
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted"
@@ -83,13 +120,16 @@ export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, r
         </div>
       </div>
       <MoreSheet
-        open={menu}
-        onClose={() => setMenu(false)}
+        mode={menu}
+        onMode={setMenu}
+        onClose={() => setMenu(null)}
         onLog={() => openLog(null)}
+        onPicture={openPicture}
         plantId={plantId}
         nickname={nickname}
         rescue={rescue}
       />
+      <PictureSheet open={pictureOpen} onClose={() => setPictureOpen(false)} plantId={plantId} nickname={nickname} {...picture} />
       <LogCareSheet
         open={!!log}
         initialType={log?.type ?? null}
@@ -100,37 +140,58 @@ export function PlantActions({ plantId, nickname, potCm, checkinDue, waterDue, r
   );
 }
 
+type MenuMode = "menu" | "rename" | "delete";
+
 function MoreSheet({
-  open,
+  mode,
+  onMode,
   onClose,
   onLog,
+  onPicture,
   plantId,
   nickname,
   rescue,
 }: {
-  open: boolean;
+  mode: MenuMode | null;
+  onMode: (mode: MenuMode) => void;
   onClose: () => void;
   onLog: () => void;
+  onPicture: () => void;
   plantId: string;
   nickname: string;
   rescue: Props["rescue"];
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const router = useRouter();
-  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState(nickname);
+  const open = mode !== null;
+  const confirming = mode === "delete";
 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) {
-      setConfirming(false);
       setError(null);
+      setName(nickname);
       dialog.showModal();
       dialog.focus();
     } else if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, nickname]);
+
+  async function onRename(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return setError("The name is empty. Type a name for your plant.");
+    setBusy(true);
+    setError(null);
+    const res = await callApi(`/api/plants/${plantId}`, { method: "PATCH", json: { nickname: trimmed } });
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    onClose();
+    router.refresh();
+  }
 
   async function onDelete() {
     setBusy(true);
@@ -158,18 +219,49 @@ function MoreSheet({
       <div className="px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3">
         <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-border lg:hidden" aria-hidden />
         <div className="flex items-center justify-between gap-2">
-          <h2 className="truncate text-lg font-semibold">{confirming ? `Delete ${nickname}?` : nickname}</h2>
+          <h2 className="truncate text-lg font-semibold">
+            {confirming ? `Delete ${nickname}?` : mode === "rename" ? `Rename ${nickname}` : nickname}
+          </h2>
           <button onClick={onClose} aria-label="Close" className="-mr-2 rounded-full p-2 text-muted">
             <CloseIcon size={20} />
           </button>
         </div>
 
-        {confirming ? (
+        {mode === "rename" ? (
+          <form onSubmit={onRename} className="mt-3">
+            <label htmlFor="plant-name" className="block text-sm text-muted">
+              Name
+            </label>
+            <input
+              id="plant-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={40}
+              autoComplete="off"
+              autoFocus
+              enterKeyHint="done"
+              className="mt-1 h-12 w-full rounded-xl border border-border bg-background px-3 text-base"
+            />
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={busy}
+                className="h-12 rounded-full border border-border font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button type="submit" disabled={busy} className="h-12 rounded-full bg-leaf font-medium text-background disabled:opacity-50">
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+        ) : confirming ? (
           <>
             <p className="mt-2 text-muted">This removes the plant, its photos and its care history. It can&apos;t be undone.</p>
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button
-                onClick={() => setConfirming(false)}
+                onClick={() => onMode("menu")}
                 disabled={busy}
                 className="h-12 rounded-full border border-border font-medium disabled:opacity-50"
               >
@@ -182,6 +274,18 @@ function MoreSheet({
           </>
         ) : (
           <ul className="mt-3 space-y-2">
+            <li>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => onMode("rename")} className="flex items-center gap-3 rounded-2xl border border-border p-4 text-left font-semibold">
+                  <PencilIcon size={24} className="shrink-0 text-leaf" />
+                  Rename
+                </button>
+                <button onClick={onPicture} className="flex items-center gap-3 rounded-2xl border border-border p-4 text-left font-semibold">
+                  <ImageIcon size={24} className="shrink-0 text-leaf" />
+                  Change picture
+                </button>
+              </div>
+            </li>
             <li>
               <button onClick={onLog} className="flex w-full items-center gap-4 rounded-2xl border border-border p-4 text-left">
                 <PlusIcon size={28} className="shrink-0 text-leaf" />
@@ -208,7 +312,7 @@ function MoreSheet({
             </li>
             <li>
               <button
-                onClick={() => setConfirming(true)}
+                onClick={() => onMode("delete")}
                 className="flex w-full items-center gap-4 rounded-2xl border border-border p-4 text-left"
               >
                 <TrashIcon size={28} className="shrink-0 text-bad" />

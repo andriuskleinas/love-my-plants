@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ReactNode } from "react";
 import { ChevronIcon } from "@/components/icons";
+import { PlantPicture } from "@/components/plant-picture";
 import { useToast } from "@/components/toast";
 import { useWaterAnswer } from "@/components/water-card";
 import { callApi } from "@/lib/api-client";
@@ -56,8 +57,7 @@ export function TaskList({ tasks }: { tasks: TodayTask[] }) {
 
 function Thumb({ url }: { url: string | null }) {
   return url ? (
-    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-    <img src={url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+    <PlantPicture url={url} className="h-12 w-12 shrink-0 rounded-xl" />
   ) : (
     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-xl" aria-hidden>
       🪴

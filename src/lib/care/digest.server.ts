@@ -10,6 +10,7 @@ import {
 } from "@/lib/messenger/reminders";
 import { escapeHtml } from "@/lib/messenger/types";
 import { notifyUser } from "@/lib/notify.server";
+import { PICTURE_ONLY_FILTER } from "@/lib/plants/pictures";
 import { sendPushToUser } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isMemberActive } from "./access";
@@ -209,6 +210,7 @@ async function sendCareNudges(userId: string, localDate: string, lastCheckinNudg
     .from("photos")
     .select("plant_id, taken_at")
     .in("plant_id", ids)
+    .not("kind", "in", PICTURE_ONLY_FILTER)
     .order("taken_at", { ascending: false });
   const lastPhoto = new Map<string, Date>();
   photos?.forEach((p) => lastPhoto.has(p.plant_id) || lastPhoto.set(p.plant_id, new Date(p.taken_at)));

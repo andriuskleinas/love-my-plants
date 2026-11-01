@@ -7,6 +7,7 @@ import { PlantGrid } from "@/components/plant-grid";
 import { needsCheckin } from "@/lib/care/plan";
 import { daysAhead } from "@/lib/care/today";
 import { healthTrend, nextAction, type PlantCard } from "@/lib/plants/collection";
+import { pictureUrl, PICTURE_ONLY_FILTER } from "@/lib/plants/pictures";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -21,7 +22,7 @@ export default async function PlantsPage() {
   const [{ data: plants }, { data: profile }] = await Promise.all([
     supabase
       .from("plants")
-      .select("id, nickname, species_name, status, created_at, cover:photos!plants_cover_photo_fk(storage_path)")
+      .select("id, nickname, species_name, status, created_at, cover:photos!plants_cover_photo_fk(storage_path, kind)")
       .neq("status", "archived")
       .order("created_at"),
     supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle(),
@@ -30,8 +31,9 @@ export default async function PlantsPage() {
   const now = new Date();
 
   const ids = (plants ?? []).map((p) => p.id);
-  const coverPath = (p: NonNullable<typeof plants>[number]) =>
-    (Array.isArray(p.cover) ? p.cover[0] : p.cover)?.storage_path as string | undefined;
+  const coverOf = (p: NonNullable<typeof plants>[number]) =>
+    (Array.isArray(p.cover) ? p.cover[0] : p.cover) as { storage_path: string; kind: string } | null;
+  const coverPath = (p: NonNullable<typeof plants>[number]) => coverOf(p)?.storage_path;
   const paths = (plants ?? []).map(coverPath).filter((x): x is string => !!x);
 
   const [{ data: assessments }, { data: tasks }, { data: photos }, { data: signed }] = ids.length
@@ -44,7 +46,12 @@ export default async function PlantsPage() {
           .eq("type", "water")
           .in("status", ["pending", "snoozed"])
           .order("due_at"),
-        supabase.from("photos").select("plant_id, taken_at").in("plant_id", ids).order("taken_at", { ascending: false }),
+        supabase
+          .from("photos")
+          .select("plant_id, taken_at")
+          .in("plant_id", ids)
+          .not("kind", "in", PICTURE_ONLY_FILTER)
+          .order("taken_at", { ascending: false }),
         paths.length
           ? supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)
           : Promise.resolve({ data: [] as { path: string | null; signedUrl: string }[] }),
@@ -77,7 +84,11 @@ export default async function PlantsPage() {
       id: p.id,
       nickname: p.nickname,
       species: p.species_name,
-      photoUrl: urls.get(coverPath(p) ?? "") ?? null,
+      photoUrl: (() => {
+        const cover = coverOf(p);
+        const url = cover && urls.get(cover.storage_path);
+        return url ? pictureUrl(url, cover.kind) : null;
+      })(),
       createdAt: p.created_at,
       health,
       trend: healthTrend(health, previous),

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { CloseIcon, PlusIcon, SearchIcon, TrendIcon } from "@/components/icons";
+import { PlantPicture } from "@/components/plant-picture";
 import { scoreTone } from "@/components/report-card";
 import { matchesSearch, SEARCH_FROM, SORT_LABELS, sortPlants, type PlantCard, type SortMode, type Trend } from "@/lib/plants/collection";
 
@@ -97,8 +98,7 @@ function Card({ plant: p }: { plant: PlantCard }) {
     >
       <div className="relative aspect-square bg-leaf-soft">
         {p.photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={p.photoUrl} alt="" className="h-full w-full object-cover" />
+          <PlantPicture url={p.photoUrl} className="h-full w-full" />
         ) : (
           <span className="flex h-full items-center justify-center text-5xl" aria-hidden>
             🪴

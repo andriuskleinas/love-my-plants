@@ -1,5 +1,6 @@
 "use client";
 
+import { PlantPicture } from "@/components/plant-picture";
 import { useToast } from "@/components/toast";
 import { callApi } from "@/lib/api-client";
 import Link from "next/link";
@@ -113,8 +114,7 @@ export function WaterCard({
     <div className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex items-center gap-3">
         {photoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" />
+          <PlantPicture url={photoUrl} className="h-12 w-12 shrink-0 rounded-xl" />
         ) : (
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-xl">💧</div>
         )}

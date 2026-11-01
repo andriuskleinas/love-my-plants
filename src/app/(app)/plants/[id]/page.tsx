@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HealthTrend } from "@/components/health-trend";
-import { BackIcon, TrendIcon } from "@/components/icons";
+import { PlantPicture } from "@/components/plant-picture";
+import { BackIcon, ImageIcon, PencilIcon, TrendIcon } from "@/components/icons";
 import { HealthBadge, ReportCard, scoreTone } from "@/components/report-card";
 import { StepList } from "@/components/step-list";
 import { Timelapse, type Frame } from "@/components/timelapse";
@@ -14,12 +15,15 @@ import { refreshPlantPlan } from "@/lib/care/plan.server";
 import { endOfLocalDay, localTime } from "@/lib/care/schedule";
 import type { Hemisphere } from "@/lib/care/watering";
 import { dueLabel } from "@/lib/plants/format";
+import { cutoutConfigured } from "@/lib/plants/cutout.server";
+import { CUTTABLE_KINDS, pictureUrl, PICTURE_KINDS, PICTURE_ONLY_KINDS } from "@/lib/plants/pictures";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
+import { creditLine, type PhotoCredit } from "@/lib/plants/stock-photos";
 import { createClient } from "@/lib/supabase/server";
 import { healthTrend } from "@/lib/plants/collection";
 import { LogCareLink } from "@/components/log-care-sheet";
 import { PlanSection } from "./plan-section";
-import { PlantActions } from "./plant-actions";
+import { OpenSheetButton, PlantActions } from "./plant-actions";
 import { SectionNav, type Section } from "./section-nav";
 
 const HISTORY_SHOWN = 15;
@@ -30,7 +34,9 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
 
   const { data: plant } = await supabase
     .from("plants")
-    .select("id, nickname, species_name, species_id, status, pot_diameter_cm, cover:photos!plants_cover_photo_fk(storage_path)")
+    .select(
+      "id, home_id, nickname, species_name, species_id, status, pot_diameter_cm, cover_photo_id, cover_pinned, cover:photos!plants_cover_photo_fk(storage_path, kind, credit)",
+    )
     .eq("id", id)
     .maybeSingle();
   if (!plant) notFound();
@@ -62,9 +68,10 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
   ]);
 
   const cover = Array.isArray(plant.cover) ? plant.cover[0] : plant.cover;
-  const coverUrl = cover
+  const coverSigned = cover
     ? (await supabase.storage.from(PHOTO_BUCKET).createSignedUrl(cover.storage_path, 3600)).data?.signedUrl
     : null;
+  const coverUrl = cover && coverSigned ? pictureUrl(coverSigned, cover.kind) : null;
   const assessment = latest ? assessmentSchema.safeParse(latest.raw) : null;
 
   const { data: claims } = await supabase.auth.getClaims();
@@ -118,17 +125,23 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     milestones = (await supabase.from("milestones").select("type, target_date, details").eq("plant_id", id)).data ?? [];
   }
 
-  // Time-lapse: whole-plant and check-in photos, each with the height estimated from it.
+  // Photos that can be the plant's picture; the whole-plant and check-in ones also make the time-lapse.
+  const picturePhotos = (photos ?? []).filter((p) => (PICTURE_KINDS as readonly string[]).includes(p.kind));
+  const { data: pictureUrls } = picturePhotos.length
+    ? await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(picturePhotos.map((p) => p.storage_path), 3600)
+    : { data: [] };
+  const urlById = new Map(picturePhotos.map((p, i) => [p.id, pictureUrls?.[i]?.signedUrl ?? ""]));
+
+  // Time-lapse: each frame with the height estimated from it.
   const heightByPhoto = new Map<string, number | null>();
   history?.forEach((a) => (a.photo_ids as string[]).forEach((pid) => heightByPhoto.set(pid, a.estimated_height_cm)));
-  const framePhotos = (photos ?? []).filter((p) => p.kind === "whole" || p.kind === "checkin");
-  const { data: frameUrls } = framePhotos.length
-    ? await supabase.storage.from(PHOTO_BUCKET).createSignedUrls(framePhotos.map((p) => p.storage_path), 3600)
-    : { data: [] };
-  const frames: Frame[] = framePhotos
-    .map((p, i) => ({ url: frameUrls?.[i]?.signedUrl ?? "", date: p.taken_at, heightCm: heightByPhoto.get(p.id) ?? null }))
+  const frames: Frame[] = picturePhotos
+    .filter((p) => p.kind === "whole" || p.kind === "checkin")
+    .map((p) => ({ url: urlById.get(p.id) ?? "", date: p.taken_at, heightCm: heightByPhoto.get(p.id) ?? null }))
     .filter((f) => f.url);
-  const lastPhotoAt = photos?.length ? new Date(photos.at(-1)!.taken_at) : null;
+  const checkinPhotos = (photos ?? []).filter((p) => !(PICTURE_ONLY_KINDS as readonly string[]).includes(p.kind));
+  const lastPhotoAt = checkinPhotos.length ? new Date(checkinPhotos.at(-1)!.taken_at) : null;
+  const coverCredit = cover?.kind === "stock" ? (cover.credit as PhotoCredit | null) : null;
   const checkinDue = needsCheckin(lastPhotoAt, new Date());
   const waterDueToday =
     waterTask && new Date(waterTask.due_at).getTime() < endOfLocalDay(profile?.timezone ?? "UTC", new Date()).getTime();
@@ -164,11 +177,17 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
     <main className="mx-auto w-full max-w-md flex-1 lg:max-w-2xl lg:pt-6">
       <div className="relative">
         {coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-          <img src={coverUrl} alt={plant.nickname} className="aspect-[4/3] w-full object-cover lg:aspect-[16/9] lg:rounded-3xl" />
+          <PlantPicture url={coverUrl} alt={plant.nickname} className="aspect-[4/3] w-full lg:aspect-[16/9] lg:rounded-3xl" />
         ) : (
           <div className="flex aspect-[4/3] w-full items-center justify-center bg-leaf-soft text-6xl lg:aspect-[16/9] lg:rounded-3xl">🪴</div>
         )}
+        <OpenSheetButton
+          sheet="picture"
+          aria-label={`Change the picture of ${plant.nickname}`}
+          className="absolute bottom-3 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 shadow-sm lg:right-3"
+        >
+          <ImageIcon size={20} />
+        </OpenSheetButton>
         <Link
           href="/plants"
           aria-label="Back to Plants"
@@ -178,10 +197,23 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
         </Link>
       </div>
 
+      {coverCredit && (
+        <p className="truncate px-4 pt-1.5 text-right text-xs text-muted">
+          <a href={coverCredit.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
+            {creditLine(coverCredit)} · Wikimedia Commons
+          </a>
+        </p>
+      )}
+
       <div className="px-4 pt-5">
-        <h1 className="text-2xl font-semibold">
-          {plant.status === "er" && "🚨 "}
-          {plant.nickname}
+        <h1 className="flex items-start gap-1 text-2xl font-semibold">
+          <span className="min-w-0 break-words">
+            {plant.status === "er" && "🚨 "}
+            {plant.nickname}
+          </span>
+          <OpenSheetButton sheet="rename" aria-label={`Rename ${plant.nickname}`} className="-my-1 shrink-0 rounded-full p-2 text-muted hover:text-leaf">
+            <PencilIcon size={18} />
+          </OpenSheetButton>
         </h1>
         {plant.species_name && <p className="italic text-muted">{plant.species_name}</p>}
 
@@ -371,6 +403,17 @@ export default async function PlantPage({ params }: PageProps<"/plants/[id]">) {
         checkinDue={checkinDue}
         waterDue={!!(waterTask && waterDueToday)}
         rescue={rescue ? "open" : "start"}
+        picture={{
+          homeId: plant.home_id,
+          speciesName: plant.species_name,
+          photos: picturePhotos
+            .map((p) => ({ id: p.id, url: urlById.get(p.id) ? pictureUrl(urlById.get(p.id)!, p.kind) : "", kind: p.kind }))
+            .filter((p) => p.url)
+            .reverse(),
+          currentId: plant.cover_photo_id,
+          pinned: plant.cover_pinned,
+          canCutOut: cutoutConfigured() && (CUTTABLE_KINDS as readonly string[]).includes(cover?.kind ?? ""),
+        }}
       />
     </main>
   );

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoMark } from "@/components/brand/marks";
+import { PlantPicture } from "@/components/plant-picture";
 import { SuitcaseIcon } from "@/components/icons";
 import { InstallCoach } from "@/components/install-coach";
 import { Landing } from "@/components/landing/landing";
@@ -14,6 +15,7 @@ import { rescueDay, stepsDueOn, type RescueStep } from "@/lib/care/rescue";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { comingUp, dayLabel, daysAhead, greeting, longDate, orderTasks, type ComingUp, type TodayTask } from "@/lib/care/today";
 import { loadTrip, type TripView } from "@/lib/care/vacation.server";
+import { pictureUrl, PICTURE_ONLY_FILTER } from "@/lib/plants/pictures";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,7 +38,7 @@ export default async function Home() {
   const [{ data: plants }, { data: profile }] = await Promise.all([
     supabase
       .from("plants")
-      .select("id, nickname, status, pot_diameter_cm, cover:photos!plants_cover_photo_fk(storage_path)")
+      .select("id, nickname, status, pot_diameter_cm, cover:photos!plants_cover_photo_fk(storage_path, kind)")
       .neq("status", "archived")
       .order("created_at"),
     supabase.from("profiles").select("timezone, display_name").eq("id", userId).maybeSingle(),
@@ -47,8 +49,8 @@ export default async function Home() {
   if (!plants?.length) return <Today header={header} tz={tz} now={now} plants={[]} tasks={[]} done={0} coming={[]} trip={null} />;
 
   const ids = plants.map((p) => p.id);
-  const coverPath = (p: (typeof plants)[number]) =>
-    (Array.isArray(p.cover) ? p.cover[0] : p.cover)?.storage_path as string | undefined;
+  const coverOf = (p: (typeof plants)[number]) => (Array.isArray(p.cover) ? p.cover[0] : p.cover) as { storage_path: string; kind: string } | null;
+  const coverPath = (p: (typeof plants)[number]) => coverOf(p)?.storage_path;
   const paths = plants.map(coverPath).filter((x): x is string => !!x);
   const endOfToday = endOfLocalDay(tz, now);
   const startOfToday = new Date(endOfToday.getTime() - 86_400_000);
@@ -75,7 +77,12 @@ export default async function Home() {
     paths.length
       ? supabase.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)
       : Promise.resolve({ data: [] as { path: string | null; signedUrl: string }[] }),
-    supabase.from("photos").select("plant_id, kind, taken_at").in("plant_id", ids).order("taken_at", { ascending: false }),
+    supabase
+      .from("photos")
+      .select("plant_id, kind, taken_at")
+      .in("plant_id", ids)
+      .not("kind", "in", PICTURE_ONLY_FILTER)
+      .order("taken_at", { ascending: false }),
     supabase.from("rescue_plans").select("plant_id, started_at, steps, progress").in("plant_id", ids).is("ended_at", null),
     // Waterings and ticked steps since local midnight, for today's progress.
     supabase.from("care_events").select("id").in("plant_id", ids).gte("done_at", startOfToday.toISOString()),
@@ -92,7 +99,11 @@ export default async function Home() {
   const lastPhoto = firstBy(photos);
   const urls = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
   const byId = new Map(plants.map((p) => [p.id, p]));
-  const photoFor = (plantId: string) => urls.get(coverPath(byId.get(plantId)!) ?? "") ?? null;
+  const photoFor = (plantId: string) => {
+    const cover = coverOf(byId.get(plantId)!);
+    const url = cover && urls.get(cover.storage_path);
+    return url ? pictureUrl(url, cover.kind) : null;
+  };
   const plantBits = (plantId: string) => ({ plantId, nickname: byId.get(plantId)!.nickname, photoUrl: photoFor(plantId) });
 
   const todo: TodayTask[] = [];
@@ -333,8 +344,7 @@ function PlantStrip({ plants }: { plants: PlantChip[] }) {
             <Link href={`/plants/${p.id}`} className="block text-center">
               <span className="relative block">
                 {p.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                  <img src={p.photoUrl} alt="" className="h-20 w-20 rounded-2xl object-cover" />
+                  <PlantPicture url={p.photoUrl} className="h-20 w-20 rounded-2xl" />
                 ) : (
                   <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-leaf-soft text-3xl">🪴</span>
                 )}

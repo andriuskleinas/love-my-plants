@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { PlantPicture } from "@/components/plant-picture";
 import { TelegramCard } from "@/components/telegram-card";
 import { WaterCard } from "@/components/water-card";
 import { endOfLocalDay } from "@/lib/care/schedule";
 import { ownerSettings, sitterPlants } from "@/lib/care/sitter.server";
 import { sitterForToken } from "@/lib/circle.server";
 import { dueLabel } from "@/lib/plants/format";
+import { pictureUrl } from "@/lib/plants/pictures";
 import { PHOTO_BUCKET } from "@/lib/plants/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SitterPhotoButton } from "./photo-button";
@@ -67,14 +69,15 @@ export default async function SitterPage({ params }: PageProps<"/sit/[token]">) 
     ids.length
       ? admin.from("care_tasks").select("id, plant_id, title, detail, due_at").in("plant_id", ids).eq("type", "water").in("status", ["pending", "snoozed"]).order("due_at")
       : Promise.resolve({ data: [] }),
-    admin.from("photos").select("id, storage_path").in("id", plants.map((p) => p.cover_photo_id).filter(Boolean) as string[]),
+    admin.from("photos").select("id, storage_path, kind").in("id", plants.map((p) => p.cover_photo_id).filter(Boolean) as string[]),
   ]);
   const { data: signed } = covers?.length
     ? await admin.storage.from(PHOTO_BUCKET).createSignedUrls(covers.map((c) => c.storage_path), 3600)
     : { data: [] };
   const photoFor = (coverId: string | null) => {
     const i = covers?.findIndex((c) => c.id === coverId) ?? -1;
-    return i >= 0 ? (signed?.[i]?.signedUrl ?? null) : null;
+    const url = i >= 0 ? signed?.[i]?.signedUrl : null;
+    return url ? pictureUrl(url, covers![i].kind) : null;
   };
   const dueBefore = endOfLocalDay(timeZone, now).getTime();
   const due = (tasks ?? []).filter((t) => new Date(t.due_at).getTime() < dueBefore);
@@ -125,8 +128,7 @@ export default async function SitterPage({ params }: PageProps<"/sit/[token]">) 
               <li key={p.id} className="rounded-2xl border border-border bg-surface p-3">
                 <div className="flex items-center gap-3">
                   {url ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                    <img src={url} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                    <PlantPicture url={url} className="h-16 w-16 shrink-0 rounded-xl" />
                   ) : (
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-leaf-soft text-2xl">🪴</div>
                   )}

@@ -11,7 +11,7 @@ export interface TrendPoint {
 const W = 320;
 const H = 150;
 const PAD = { top: 12, right: 14, bottom: 24, left: 30 };
-const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+const fmt = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 /**
  * Overall health over time: one series, 2px line, 8px markers with a surface ring,

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
 
     const { data: plant } = await supabase
       .from("plants")
-      .select("id, home_id, species_name, pot_diameter_cm, pot_material, has_drainage, window_direction, cover_photo_id")
+      .select("id, home_id, species_name, pot_diameter_cm, pot_material, has_drainage, window_direction, cover_photo_id, cover_pinned")
       .eq("id", plantId)
       .maybeSingle();
     if (!plant) throw new HttpError(404, "This plant no longer exists. Go back to your plants.");
@@ -226,8 +226,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/plants/
     const plantUpdate: Record<string, unknown> = {
       status: rescuePlanId || needsEmergency(assessment.scores.health.value, previous?.health) ? "er" : "ok",
     };
-    // Newest whole-plant view becomes the cover (registration or weekly check-in).
-    if (!plant.cover_photo_id || cover.kind === "whole" || cover.kind === "checkin") plantUpdate.cover_photo_id = cover.id;
+    // Newest whole-plant view becomes the cover (registration or weekly check-in), unless the owner picked one.
+    if (!plant.cover_photo_id || (!plant.cover_pinned && (cover.kind === "whole" || cover.kind === "checkin"))) {
+      plantUpdate.cover_photo_id = cover.id;
+    }
     if (!plant.species_name && speciesName) {
       plantUpdate.species_name = speciesName;
       plantUpdate.species_id = speciesId;

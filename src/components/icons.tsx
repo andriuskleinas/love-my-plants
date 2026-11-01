@@ -158,3 +158,25 @@ export const TrashIcon = (p: IconProps) => (
     <path d="M10 11v5M14 11v5" />
   </Icon>
 );
+
+export const PencilIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M15.5 5.5l3 3M4.5 19.5l1-4 10.6-10.6a2.1 2.1 0 0 1 3 3L8.5 18.5l-4 1Z" />
+  </Icon>
+);
+
+export const ImageIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="M20.5 15.5l-4.5-4.5-8.5 8.5" />
+  </Icon>
+);
+
+export const ScissorsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="6.5" cy="7" r="2.5" />
+    <circle cx="6.5" cy="17" r="2.5" />
+    <path d="M8.6 8.4 19.5 17.5M8.6 15.6 19.5 6.5" />
+  </Icon>
+);

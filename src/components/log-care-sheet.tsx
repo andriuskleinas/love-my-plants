@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { BackIcon, CloseIcon } from "@/components/icons";
+import { PlantPicture } from "@/components/plant-picture";
 import { useToast } from "@/components/toast";
 import { callApi } from "@/lib/api-client";
 import { CARE_LABELS, LOG_TYPES, NOTE_MAX, type LogType } from "@/lib/care/log";
@@ -256,8 +257,7 @@ export function LogCareSheet({ open, initialType, onClose, plants }: Props) {
                       className={`relative flex w-full flex-col items-center gap-1.5 rounded-2xl border p-2 text-center text-sm ${on ? "border-leaf bg-leaf-soft font-medium" : "border-border"}`}
                     >
                       {p.photoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL
-                        <img src={p.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                        <PlantPicture url={p.photoUrl} className="h-14 w-14 rounded-xl" />
                       ) : (
                         <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-leaf-soft text-2xl" aria-hidden>
                           🪴
